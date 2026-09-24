@@ -21,6 +21,22 @@ declare global {
     created_at: Date;
   }> | undefined;
   // eslint-disable-next-line no-var
+  var __mockAvailableModules: Array<{
+    id: number;
+    slug: string;
+    name: string;
+    description: string;
+    is_active: boolean;
+    created_at: Date;
+  }> | undefined;
+  // eslint-disable-next-line no-var
+  var __mockUserSubscriptions: Array<{
+    id: number;
+    user_id: number;
+    module_id: number;
+    subscribed_at: Date;
+  }> | undefined;
+  // eslint-disable-next-line no-var
   var __schemaInitialized: boolean | undefined;
 }
 
@@ -49,6 +65,32 @@ export function getPool(): Pool {
 // Fallback in-memory stores in case DB connection fails or credentials expire
 if (!global.__mockUsers) global.__mockUsers = [];
 if (!global.__mockDontStop) global.__mockDontStop = [];
+if (!global.__mockAvailableModules) {
+  global.__mockAvailableModules = [
+    { id: 1, slug: "ssh", name: "SSH", description: "Acceso remoto y administración de servidores", is_active: true, created_at: new Date() },
+    { id: 2, slug: "docker", name: "Docker", description: "Contenedores, imágenes y orquestación", is_active: true, created_at: new Date() },
+    { id: 3, slug: "postgres", name: "PostgreSQL", description: "Consultas SQL y manejo de datos", is_active: true, created_at: new Date() },
+    { id: 4, slug: "typescript", name: "TypeScript", description: "Tipos, interfaces y seguridad de código", is_active: true, created_at: new Date() },
+    { id: 5, slug: "nextjs", name: "Next.js", description: "App Router y desarrollo frontend moderno", is_active: true, created_at: new Date() },
+  ];
+}
+if (!global.__mockUserSubscriptions) global.__mockUserSubscriptions = [];
+
+export interface AvailableModuleRecord {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+  is_active: boolean;
+  created_at: Date;
+}
+
+export interface UserModuleSubscriptionRecord {
+  id: number;
+  user_id: number;
+  module_id: number;
+  subscribed_at: Date;
+}
 
 export async function initDatabase() {
   const connectionString = getConnectionString();
@@ -62,6 +104,8 @@ export async function initDatabase() {
   const pool = getPool();
   const client = await pool.connect();
   try {
+    await client.query("BEGIN");
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -83,9 +127,48 @@ export async function initDatabase() {
       );
     `);
 
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS available_modules (
+        id SERIAL PRIMARY KEY,
+        slug VARCHAR(50) UNIQUE NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        description TEXT,
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_module_subscriptions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        module_id INTEGER NOT NULL REFERENCES available_modules(id) ON DELETE CASCADE,
+        subscribed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (user_id, module_id)
+      );
+    `);
+
+    await client.query(`
+      INSERT INTO available_modules (slug, name, description, is_active)
+      VALUES
+        ('ssh', 'SSH', 'Acceso remoto y administración de servidores', TRUE),
+        ('docker', 'Docker', 'Contenedores, imágenes y orquestación', TRUE),
+        ('postgres', 'PostgreSQL', 'Consultas SQL y manejo de datos', TRUE),
+        ('typescript', 'TypeScript', 'Tipos, interfaces y seguridad de código', TRUE),
+        ('nextjs', 'Next.js', 'App Router y desarrollo frontend moderno', TRUE)
+      ON CONFLICT (slug) DO NOTHING;
+    `);
+
+    await client.query("COMMIT");
     global.__schemaInitialized = true;
     console.log("✅ Supabase PostgreSQL: Tablas verificadas y creadas correctamente.");
   } catch (error) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      // no-op
+    }
+    global.__schemaInitialized = false;
     console.error(
       "❌ Error al inicializar/verificar tablas en PostgreSQL:",
       (error as Error).message
@@ -297,6 +380,95 @@ export async function getDontStopEntries(limit = 50): Promise<DontStopRecord[]> 
   return [...global.__mockDontStop!]
     .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
     .slice(0, limit);
+}
+
+export async function getAvailableModules(): Promise<AvailableModuleRecord[]> {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    const pool = getPool();
+    const res = await pool.query(
+      `SELECT id, slug, name, description, is_active, created_at
+       FROM available_modules
+       ORDER BY id ASC`
+    );
+    return res.rows;
+  }
+
+  return [...global.__mockAvailableModules!];
+}
+
+export async function getUserSubscribedModules(userId: number | string): Promise<AvailableModuleRecord[]> {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    const pool = getPool();
+    const res = await pool.query(
+      `SELECT am.id, am.slug, am.name, am.description, am.is_active, am.created_at
+       FROM user_module_subscriptions ums
+       INNER JOIN available_modules am ON am.id = ums.module_id
+       WHERE ums.user_id = $1
+       ORDER BY am.id ASC`,
+      [userId]
+    );
+    return res.rows;
+  }
+
+  const userIdNum = Number(userId);
+  const subscribedModuleIds = global.__mockUserSubscriptions!
+    .filter((sub) => sub.user_id === userIdNum)
+    .map((sub) => sub.module_id);
+
+  return global.__mockAvailableModules!.filter((module) => subscribedModuleIds.includes(module.id));
+}
+
+export async function setUserModuleSubscriptions(
+  userId: number | string,
+  moduleSlugs: string[]
+): Promise<AvailableModuleRecord[]> {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    const pool = getPool();
+    const normalizedSlugs = [...new Set((moduleSlugs || []).map((slug) => String(slug).trim().toLowerCase()).filter(Boolean))];
+
+    await pool.query(`DELETE FROM user_module_subscriptions WHERE user_id = $1`, [userId]);
+
+    if (normalizedSlugs.length > 0) {
+      const moduleRows = await pool.query(
+        `SELECT id, slug FROM available_modules WHERE LOWER(slug) = ANY($1)`,
+        [normalizedSlugs]
+      );
+
+      if (moduleRows.rows.length > 0) {
+        const values = moduleRows.rows
+          .map((row) => `(${Number(userId)}, ${Number(row.id)})`)
+          .join(", ");
+
+        await pool.query(
+          `INSERT INTO user_module_subscriptions (user_id, module_id) VALUES ${values}`
+        );
+      }
+    }
+
+    return getUserSubscribedModules(userId);
+  }
+
+  const userIdNum = Number(userId);
+  const availableBySlug = Object.fromEntries(global.__mockAvailableModules!.map((module) => [module.slug, module]));
+  const selectedIds = [...new Set((moduleSlugs || []).map((slug) => availableBySlug[String(slug).trim().toLowerCase()]?.id).filter(Boolean))];
+
+  global.__mockUserSubscriptions = global.__mockUserSubscriptions!.filter((sub) => sub.user_id !== userIdNum);
+  selectedIds.forEach((moduleId, index) => {
+    global.__mockUserSubscriptions!.push({
+      id: global.__mockUserSubscriptions!.length + index + 1,
+      user_id: userIdNum,
+      module_id: Number(moduleId),
+      subscribed_at: new Date(),
+    });
+  });
+
+  return getUserSubscribedModules(userIdNum);
 }
 
 export async function query(text: string, params?: unknown[]) {

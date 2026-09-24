@@ -14,15 +14,15 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Descripción
 
-Plataforma educativa de práctica técnica para **SSH**, **Docker**, **PostgreSQL**, **TypeScript** y **Next.js**. La app combina terminales simuladas, retos progresivos, documentación oficial y ejercicios de código dentro de una sola experiencia de aprendizaje.
+Plataforma educativa de práctica técnica para **SSH**, **Docker**, **PostgreSQL**, **TypeScript** y **Next.js**. La app combina terminales simuladas, retos progresivos, documentación oficial, gestión de progreso y suscripción por módulos dentro de una sola experiencia de aprendizaje.
 
 ## Stack tecnológico
 
 - **Framework:** Next.js 16.3.6 (App Router + Turbopack)
 - **UI:** React 19, Tailwind CSS 4, Lucide React
 - **Lenguaje:** TypeScript 5 en strict mode
-- **Base de datos:** PostgreSQL en Supabase (`pg` pool)
-- **Auth:** `bcryptjs` + `jose` + JWT HTTP-only cookies
+- **Base de datos:** PostgreSQL en Supabase con `pg` pool
+- **Auth:** `bcryptjs`, `jose` y cookies JWT HTTP-only
 - **Programación temporal:** `node-cron`
 - **Build tool:** Turbopack integrado en Next.js
 
@@ -30,11 +30,13 @@ Plataforma educativa de práctica técnica para **SSH**, **Docker**, **PostgreSQ
 
 - **Retos mejorados:** validación de respuestas, bloqueo de repetición, selección de semana, paginación de 6 retos por página, límite visual de 5 números de paginación, restricción de semanas futuras y revelación de soluciones después de fallos o éxito.
 - **Banco de retos ampliado:** 50 desafíos por módulo para SSH, Docker, PostgreSQL, TypeScript y Next.js, con rotación semanal y filtro por módulo.
-- **Documentación oficial más útil:** búsqueda por módulo, extracción textual desde páginas oficiales, renderizado de contenido documental real, no URLs en bruto; soporte opcional para Gemini API key.
+- **Documentación oficial más útil:** búsqueda por módulo, extracción textual desde páginas oficiales, renderizado de contenido documental real, no URLs en bruto, soporte opcional para Gemini API key y explicación de comandos/conceptos.
 - **Next.js añadido como módulo oficial:** ruta `/nextjs`, documentación, práctica y editor de código.
 - **TypeScript mejorado:** editor de práctica con feedback de compilación real y ejemplos interactivos.
 - **UX móvil ajustada:** menú hamburguesa vertical superpuesto para pantallas pequeñas, sin romper el ancho del contenido.
 - **Diseño visual del docs page refinado:** más legible, menos saturado y más orientado a contenido editorial.
+- **Suscripciones por módulo:** el usuario puede elegir los módulos activos a los que quiere suscribirse y se guarda en tablas de relación con la base de datos.
+- **DB resilient:** se validan tablas faltantes antes de CRUD y se crea la estructura del sistema de módulos y usuarios si hace falta.
 
 ## Arquitectura
 
@@ -50,7 +52,11 @@ app/
 │   │   ├── register/route.ts
 │   │   └── update-account/route.ts
 │   ├── docs/route.ts
-│   └── dont-stop/route.ts
+│   ├── dont-stop/route.ts
+│   ├── modules/
+│   │   ├── available/route.ts
+│   │   └── subscribe/route.ts
+│   └── ...
 ├── challenges/
 │   └── page.tsx
 ├── components/
@@ -99,6 +105,8 @@ scripts/
 
 - **Usa PostgreSQL + Supabase** con validación automática de tablas antes de CRUD.
 - **Usuarios**: `email`, `username`, `password_hash`, `created_at`, `updated_at`.
+- **Módulos disponibles**: `slug`, `name`, `description`.
+- **Suscripciones de usuario**: relación `user_id` + `module_id` con constraint de unicidad.
 - **`dont_stop`**: `source`, `message`, `payload`, `created_at`.
 - **JWT** en cookies HTTP-only y `bcryptjs` para hashing.
 - Variables mínimas: `DATABASE_URL`, `JWT_SECRET`, `NEXT_PUBLIC_APP_URL`.
@@ -111,6 +119,7 @@ scripts/
 - Cada módulo tiene su propio esquema visual.
 - La documentación oficial se organiza por módulo y por contenido buscado.
 - El menú móvil usa overlay vertical para no romper el ancho de la página.
+- La suscripción de módulos se gestiona con tablas dedicadas y endpoints REST.
 
 ## Rutas principales
 
@@ -119,12 +128,14 @@ scripts/
 | `/` | Client Component | Dashboard |
 | `/docs` | Client Component | Docs con búsqueda y scraping |
 | `/challenges` | Client Component | Retos con bloqueo y paginación |
-| `/account` | Client Component | Perfil y cuenta |
+| `/account` | Client Component | Perfil, nivel y suscripciones |
 | `/ssh` | Client Component | Terminal SSH |
 | `/docker` | Client Component | Terminal Docker |
 | `/postgres` | Client Component | Terminal PostgreSQL |
 | `/typescript` | Client Component | Editor TypeScript |
 | `/nextjs` | Client Component | Módulo Next.js |
+| `/api/modules/available` | Route Handler | Módulos disponibles para el usuario |
+| `/api/modules/subscribe` | Route Handler | Guardado de suscripciones |
 
 ## Comandos de ejecución
 
@@ -141,4 +152,5 @@ npm run lint
 - La búsqueda filtra por coincidencias reales del término buscado.
 - Los retos no permiten reintentos ilimitados ni saltos de semana sin completar la previa.
 - El proyecto fue ampliado con soporte de flujo de práctica para Next.js y TypeScript real.
+- El flujo de módulos está diseñado para ser configurable y persistente por usuario.
 - El proyecto está protegido por una licencia de uso restringido: no se permite reutilizar, clonar, redistribuir, modificar ni vender el código ni el contenido sin permiso explícito del propietario.

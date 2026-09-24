@@ -1,60 +1,62 @@
 # 🧠 DevPracticeLab
 
-Plataforma interactiva para practicar **SSH**, **Docker**, **PostgreSQL**, **TypeScript** y **Next.js** desde terminales simuladas, sin requerir servidores reales ni configuración externa.
+Plataforma educativa práctica para entrenar **SSH**, **Docker**, **PostgreSQL**, **TypeScript** y **Next.js** con rutas de aprendizaje, retos semanales, documentación oficial y ejercitación real de código.
 
-Construido con [Next.js](https://nextjs.org) 16.3.6, [React](https://react.dev) 19, [Tailwind CSS](https://tailwindcss.com) 4 y [Lucide React](https://lucide.dev).
+Construido con [Next.js](https://nextjs.org) 16.3.6, [React](https://react.dev) 19, [Tailwind CSS](https://tailwindcss.com) 4, [Lucide React](https://lucide.dev) y PostgreSQL con Supabase.
 
 ---
 
 ## ✨ Características principales
 
-- **Reto semanal con lógica de bloqueo y progreso** (`/challenges`)
-  - 250 retos repartidos en 5 módulos: SSH, Docker, PostgreSQL, TypeScript y Next.js
-  - validación de respuestas
-  - bloqueo de retos repetidos si se fallan o si ya están completados
-  - restricción por semana: no se puede avanzar a la siguiente si la anterior no está completada
-  - paginación con grupos de 6 retos por página y límite visual de 5 números de paginación
-  - revelación de la solución solo tras varios intentos fallidos o cuando el reto se completa con éxito
+- **Retos semanales con regla de progresión y bloqueo** (`/challenges`)
+  - Banco ampliado a 50 retos por módulo, con 5 módulos activos: SSH, Docker, PostgreSQL, TypeScript y Next.js.
+  - Validación de respuestas con feedback inmediato.
+  - Bloqueo de retos repetidos tras fallo o finalización correcta.
+  - Restricción por semanas: no se permite pasar a la siguiente si la anterior no está completada.
+  - Paginación por grupos de 6 retos y límite visual de 5 números de página.
+  - Revelación progresiva de la solución según el resultado del intento.
 
-- **Documentación oficial sincronizada con la web** (`/docs`, `/api/docs`)
-  - búsqueda por módulo: SSH, Docker, PostgreSQL, TypeScript y Next.js
-  - filtro por conceptos, comandos o temas del módulo activo
-  - extracción textual y renderizado de contenido relevante, no solo enlaces planos
-  - soporte opcional para Gemini API key
-  - fallback a páginas oficiales y scraping con contenido legible
+- **Documentación oficial por módulo** (`/docs`, `/api/docs`)
+  - Búsqueda filtrada por módulo activo.
+  - Extracción de contenido relevante desde páginas oficiales y no solo enlaces planos.
+  - Renderizado del contenido como documentación útil, no como resultados crudos.
+  - Soporte opcional para clave de Gemini API Studio.
+  - Incluye explicación de qué hace cada comando o concepto y cómo se usa.
 
-- **Práctica de TypeScript con editor real** (`/typescript`)
-  - compilación con TypeScript en navegador
-  - feedback de errores de compilación
-  - edición de ejemplos y validación sobre código real
+- **Práctica con TypeScript real** (`/typescript`)
+  - Editor para escribir y validar código TypeScript.
+  - Feedback de compilación real.
+  - Ejemplos interactivos con validación del resultado.
 
-- **Práctica de Next.js** (`/nextjs`)
-  - módulo adicional dedicado a App Router, layouts, rendering, rutas y metadata
-  - integración con el mismo sistema de progreso y editor de código
+- **Módulo oficial de Next.js** (`/nextjs`)
+  - Sección dedicada a App Router, layouts, rendering, rutas, metadata y estructuras propias de Next.js.
+  - Integrado con el flujo de progreso del usuario y el editor de práctica.
 
-- **Autenticación y gestión de cuenta** (`/login`, `/register`, `/account`)
-  - registro con hash bcrypt
-  - login con JWT en cookies HTTP-only
-  - edición de perfil y validación de contraseña actual
+- **Autenticación, cuenta y suscripción por módulo** (`/login`, `/register`, `/account`)
+  - Registro con bcrypt y JWT HTTP-only.
+  - Gestión del perfil del usuario.
+  - Selección de módulos activos por suscripción.
+  - Persistencia en tablas de relación entre usuarios y módulos disponibles.
 
-- **Tracking de progreso por módulo**
-  - métricas de comandos ejecutados y únicos
-  - estado global del dashboard
-  - barra de dominio por tecnología
+- **Seguimiento de progreso y nivel de cuenta**
+  - Barra de progreso contextualizada por módulo.
+  - Cálculo de niveles de experiencia y avance del usuario.
+  - Estado global del dashboard para cada tecnología.
 
 - **Terminales simuladas por módulo**
-  - `SSH`: conexiones remotas, claves, archivos, prompt interactivo
-  - `Docker`: contenedores, redes, volúmenes, compose
-  - `PostgreSQL`: consultas SQL y psql simulados
-  - `TypeScript`: edición y compilación
-  - `Next.js`: conceptos y app router
+  - SSH: conexión, archivos, permisos, comandos remotos.
+  - Docker: contenedores, redes, volúmenes, compose.
+  - PostgreSQL: consultas SQL, gestión de datos.
+  - TypeScript: compilación y validación.
+  - Next.js: conceptos del framework, routing y renderizado.
 
-- **UX móvil mejorada**
-  - menú hamburguesa vertical superpuesto sobre la página
-  - responsive y sin romper el ancho del contenido
+- **UX mejorada y responsive**
+  - Menú hamburguesa vertical superpuesto en móvil.
+  - Layout más legible y menos saturado en documentación.
+  - Sin romper el ancho del contenido principal.
 
-- **Cron para `dont_stop`** (`/api/dont-stop`)
-  - registros periódicos cada 2 horas para monitorización de actividad
+- **Cron de actividad** (`/api/dont-stop`)
+  - Automatización para registrar señales de actividad del usuario y mantener seguimiento.
 
 ---
 
@@ -72,7 +74,11 @@ app/
 │   │   ├── register/route.ts
 │   │   └── update-account/route.ts
 │   ├── docs/route.ts
-│   └── dont-stop/route.ts
+│   ├── dont-stop/route.ts
+│   ├── modules/
+│   │   ├── available/route.ts
+│   │   └── subscribe/route.ts
+│   └── ...
 ├── challenges/
 │   └── page.tsx
 ├── components/
@@ -106,7 +112,6 @@ app/
 ├── globals.css
 ├── layout.tsx
 ├── page.tsx
-├── favicon.ico
 lib/
 ├── accountLevel.ts
 ├── auth.ts
@@ -124,44 +129,83 @@ scripts/
 
 | Ruta | Descripción |
 | --- | --- |
-| `/` | Dashboard con resumen de progreso y acceso a módulos |
-| `/docs` | Documentación técnica oficial por módulo |
-| `/challenges` | Banco de retos semanales y progreso |
-| `/account` | Perfil y configuración del usuario |
+| `/` | Dashboard principal y acceso a módulos |
+| `/docs` | Documentación oficial por módulo |
+| `/challenges` | Retos y lógica de progreso |
+| `/account` | Perfil, nivel y suscripción a módulos |
 | `/ssh` | Práctica SSH |
 | `/docker` | Práctica Docker |
 | `/postgres` | Práctica PostgreSQL |
-| `/typescript` | Práctica y editor TypeScript |
-| `/nextjs` | Práctica de Next.js |
+| `/typescript` | Editor y práctica TypeScript |
+| `/nextjs` | Módulo de práctica Next.js |
 | `/login` | Inicio de sesión |
 | `/register` | Registro |
+| `/api/modules/available` | Módulos disponibles y suscritos del usuario |
+| `/api/modules/subscribe` | Guardado de suscripciones por módulo |
+| `/api/docs` | Búsqueda y extracción de documentación oficial |
 
 ---
 
-## 🧩 Módulos y comportamiento
+## 🧩 Sistema de módulos y suscripción
 
-### Retos
-- rotación semanal por módulo
-- validación de cierre y repetición
-- bloqueo de acceso a semanas futuras si no se completan las anteriores
-- soluciones ocultas que aparecen según intentos fallidos o éxito
+La app permite que el usuario elija qué módulos quiere tener activos en su perfil. Esto se almacena con una relación entre el usuario y los módulos disponibles.
 
-### Documentación
-- búsqueda basada en el módulo activo
-- extracción de contenido real desde páginas oficiales
-- renderizado en tarjetas de artículo tipo documentación
-- pantalla visualmente más clara y legible
+### Tablas principales
 
-### Editor de TypeScript / Next.js
-- evaluación del código con TypeScript
-- mensajes de compilación útiles
-- integración con el flujo de práctica del proyecto
+```sql
+CREATE TABLE IF NOT EXISTS public.available_modules (
+  id SERIAL PRIMARY KEY,
+  slug VARCHAR(100) UNIQUE NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.user_module_subscriptions (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  module_id INTEGER NOT NULL REFERENCES public.available_modules(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(user_id, module_id)
+);
+```
+
+En la práctica:
+- Los módulos disponibles se leen desde la base de datos.
+- El usuario puede activarlos o desactivarlos desde la cuenta.
+- Al registrarse, el sistema puede dejar al usuario suscrito a todos los módulos por defecto.
 
 ---
 
-## 🗃️ Base de datos
+## 🧠 Lógica de retos y progreso
 
-El backend usa PostgreSQL en Supabase y se valida la existencia de tablas al iniciar operaciones de BD.
+- Rotación semanal por módulo.
+- Validación de respuesta antes de marcar como completado.
+- Bloqueo de reintentos repetidos cuando la respuesta es incorrecta.
+- Restricción de semanas futuras si no se han completado las anteriores.
+- Paginación de 6 retos por página.
+- Límite visual de 5 páginas mostradas en paralelo.
+- Soluciones reveladas tras acierto o tras varios fallos.
+
+---
+
+## 📚 Documentación oficial
+
+La documentación ha sido diseñada para priorizar contenido real y útil sobre enlaces sin contexto.
+
+### Características
+- Filtro por módulo activo.
+- Búsqueda por conceptos, comandos o temas.
+- Extracción de contenido textual desde fuentes oficiales.
+- Presentación como material documental, no como URLs brutas.
+- Explicación de qué hace cada comando o concepto y cómo se usa.
+- Soporte opcional para Gemini API Studio si se configura una clave.
+
+---
+
+## 🗃️ Base de datos y autenticación
+
+El backend usa PostgreSQL en Supabase y valida la existencia de tablas antes de cada operación crítica.
 
 ### Tablas principales
 
@@ -207,17 +251,17 @@ npm run lint
 
 ## 📌 Notas de desarrollo
 
-- Los módulos de práctica están separados por carpeta con `page.tsx` y `commands.ts`.
-- El `Navbar` usa menú hamburguesa en pantallas pequeñas y navegación horizontal en desktop.
-- La documentación oficial se actualiza en función del módulo activo y la búsqueda del usuario.
-- El código se mantiene en TypeScript con strict mode.
-- El proyecto usa App Router de Next.js 16 y Turbopack.
+- La app usa App Router de Next.js con Turbopack.
+- El tipado se mantiene en TypeScript strict mode.
+- La lógica de documentación y módulos está separada por backend y UI.
+- El menú móvil usa overlay vertical para mejorar la experiencia sin romper la anchura del contenido.
+- La base de datos se inicializa de forma idempotente para crear tablas faltantes antes de ejecutar CRUD.
 
 ---
 
 ## 🌐 Deploy
 
-Se puede desplegar facilmente en Vercel o en cualquier entorno compatible con Next.js.
+La app puede desplegarse en Vercel o en cualquier entorno compatible con Next.js.
 
 ```bash
 npm run build
@@ -227,11 +271,8 @@ npm run build
 
 ## ⚖️ Licencia
 
-Este proyecto está protegido con una licencia de uso restringido. Todos los derechos
-sobre el código, estilo, contenido, assets y documentación quedan reservados.
+Este proyecto está protegido con una licencia de uso restringido. Todos los derechos sobre el código, estilos, contenido, assets, documentación y materiales asociados quedan reservados.
 
-No se permite la reutilización, modificación, redistribución, clonación, venta,
-ni uso como base para otros proyectos sin autorización expresa por escrito del
-propietario del repositorio.
+No se permite reutilizar, clonar, redistribuir, modificar, vender ni usar el código o contenido como base para otros proyectos sin autorización expresa por escrito del propietario.
 
 Consulta el archivo [LICENSE](LICENSE) para más detalles.

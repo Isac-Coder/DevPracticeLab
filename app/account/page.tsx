@@ -44,6 +44,9 @@ export default function AccountPage() {
 
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
+  const [availableModules, setAvailableModules] = useState<Array<{id:number; slug:string; name:string; description:string}>>([]);
+  const [selectedModuleSlugs, setSelectedModuleSlugs] = useState<string[]>([]);
+  const [modulesSaving, setModulesSaving] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -79,6 +82,59 @@ export default function AccountPage() {
       setEmail(user.email);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const fetchModules = async () => {
+      try {
+        const res = await fetch("/api/modules/available");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.modules) {
+          setAvailableModules(data.modules);
+          setSelectedModuleSlugs(data.subscribedModules || data.modules.map((mod: { slug: string }) => mod.slug));
+        }
+      } catch {
+        setAvailableModules([]);
+      }
+    };
+
+    fetchModules();
+  }, [user]);
+
+  const toggleModule = (slug: string) => {
+    setSelectedModuleSlugs((prev) => {
+      if (prev.includes(slug)) {
+        return prev.filter((item) => item !== slug);
+      }
+      return [...prev, slug];
+    });
+  };
+
+  const saveModuleSubscriptions = async () => {
+    if (!user) return;
+
+    setModulesSaving(true);
+    try {
+      const res = await fetch("/api/modules/subscribe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ moduleSlugs: selectedModuleSlugs }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "No se pudieron guardar los módulos.");
+      }
+
+      setSuccessMsg((prev) => prev || "Tus suscripciones de módulo se guardaron correctamente.");
+    } catch (error) {
+      setErrorMsg((error as Error).message || "Error al guardar los módulos.");
+    } finally {
+      setModulesSaving(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -176,6 +232,7 @@ export default function AccountPage() {
   const dockerStats = getModuleStats("docker");
   const postgresStats = getModuleStats("postgres");
   const tsStats = getModuleStats("typescript");
+  const subscribedModulesCount = selectedModuleSlugs.length;
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-950">
@@ -281,7 +338,7 @@ export default function AccountPage() {
                 <span>Módulos Activos</span>
                 <Code2 className="h-4 w-4 text-blue-400" />
               </div>
-              <div className="text-2xl font-black text-white">4 Tecnologías</div>
+              <div className="text-2xl font-black text-white">{subscribedModulesCount} Suscritos</div>
             </div>
 
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
@@ -444,6 +501,59 @@ export default function AccountPage() {
 
             {/* Side summary: Practice Shortcuts & Progress */}
             <div className="space-y-6">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md">
+                <div className="mb-5 flex items-center justify-between gap-3">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Award className="h-4 w-4 text-emerald-400" />
+                    Módulos de Suscripción
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={saveModuleSubscriptions}
+                    disabled={modulesSaving}
+                    className="rounded-lg bg-emerald-500 px-3 py-1.5 text-[10px] font-bold text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-50"
+                  >
+                    {modulesSaving ? "Guardando..." : "Guardar"}
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {availableModules.length === 0 ? (
+                    <p className="text-xs text-zinc-500">No hay módulos disponibles en este momento.</p>
+                  ) : (
+                    availableModules.map((module) => {
+                      const selected = selectedModuleSlugs.includes(module.slug);
+                      return (
+                        <button
+                          type="button"
+                          key={module.slug}
+                          onClick={() => toggleModule(module.slug)}
+                          className={`w-full rounded-xl border p-3 text-left transition ${
+                            selected
+                              ? "border-emerald-500/40 bg-emerald-500/10"
+                              : "border-zinc-800 bg-zinc-950/50 hover:border-zinc-700"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <div className="text-sm font-bold text-white">{module.name}</div>
+                              <div className="mt-0.5 text-[11px] text-zinc-400">{module.description}</div>
+                            </div>
+                            <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-bold ${
+                              selected
+                                ? "border-emerald-500 bg-emerald-500 text-zinc-950"
+                                : "border-zinc-700 bg-zinc-900 text-zinc-500"
+                            }`}>
+                              {selected ? "✓" : ""}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md">
                 <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
                   <Award className="h-4 w-4 text-emerald-400" />

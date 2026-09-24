@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createUser, findUserByEmail } from "@/lib/db";
+import { createUser, findUserByEmail, setUserModuleSubscriptions } from "@/lib/db";
 import { hashPassword, generateToken, COOKIE_NAME } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
@@ -42,7 +42,13 @@ export async function POST(req: NextRequest) {
     const passwordHash = await hashPassword(password);
     const user = await createUser(email, username, passwordHash);
 
-    // 4. Generate JWT Token
+    // 4. Subscribe user to all available modules by default
+    await setUserModuleSubscriptions(
+      user.id,
+      ["ssh", "docker", "postgres", "typescript", "nextjs"]
+    );
+
+    // 5. Generate JWT Token
     const token = await generateToken({
       userId: user.id,
       email: user.email,
