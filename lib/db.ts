@@ -146,10 +146,27 @@ export async function initDatabase() {
       );
     `);
 
+    // Ensure user_module_subscriptions uses the same type for user_id as users.id
+    const userIdColumnRes = await client.query(
+      `SELECT data_type, udt_name
+       FROM information_schema.columns
+       WHERE table_name = 'users' AND column_name = 'id'
+       LIMIT 1`
+    );
+
+    let userIdColumnType = "INTEGER";
+    if (userIdColumnRes.rows.length > 0) {
+      const udt = (userIdColumnRes.rows[0].udt_name || "").toLowerCase();
+      const dataType = (userIdColumnRes.rows[0].data_type || "").toLowerCase();
+      if (udt === "uuid" || dataType === "uuid") {
+        userIdColumnType = "UUID";
+      }
+    }
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_module_subscriptions (
         id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        user_id ${userIdColumnType} NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         module_id INTEGER NOT NULL REFERENCES available_modules(id) ON DELETE CASCADE,
         subscribed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (user_id, module_id)
