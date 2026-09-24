@@ -98,11 +98,19 @@ export async function initDatabase() {
     console.warn("⚠️ No se encontró DATABASE_URL configurada.");
     return;
   }
-
   if (global.__schemaInitialized) return;
 
   const pool = getPool();
-  const client = await pool.connect();
+  let client;
+  try {
+    client = await pool.connect();
+  } catch (connErr) {
+    console.error("⚠️ No se pudo conectar a la base de datos PostgreSQL:", (connErr as Error).message);
+    // No lanzar: dejamos que la app continúe usando los stores en memoria como fallback.
+    global.__schemaInitialized = false;
+    return;
+  }
+
   try {
     await client.query("BEGIN");
 
@@ -173,9 +181,15 @@ export async function initDatabase() {
       "❌ Error al inicializar/verificar tablas en PostgreSQL:",
       (error as Error).message
     );
-    throw error;
+    // No relanzamos el error para evitar que una mala conexión a la BD provoque 500s en producción.
+    // La aplicación seguirá funcionando con los stores en memoria como fallback.
+    return;
   } finally {
-    client.release();
+    try {
+      client.release();
+    } catch {
+      // no-op
+    }
   }
 }
 
