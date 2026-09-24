@@ -27,18 +27,18 @@ declare global {
 const pool =
   global.__dbPool ||
   new Pool({
-    connectionString,
-    ssl: {
-      rejectUnauthorized: false,
-    },
-    max: 10,
+    connectionString: connectionString || undefined,
+    ssl: connectionString
+      ? {
+          rejectUnauthorized: false,
+        }
+      : undefined,
+    max: 5,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
   });
 
-if (process.env.NODE_ENV !== "production") {
-  global.__dbPool = pool;
-}
+global.__dbPool = pool;
 
 // Fallback in-memory stores in case DB connection fails or credentials expire
 if (!global.__mockUsers) global.__mockUsers = [];
@@ -47,7 +47,7 @@ if (!global.__mockDontStop) global.__mockDontStop = [];
 let schemaInitialized = false;
 
 export async function initDatabase() {
-  if (schemaInitialized) return;
+  if (schemaInitialized || !connectionString) return;
 
   try {
     const client = await pool.connect();
