@@ -62,7 +62,7 @@ async function sendScheduledPing() {
     payload: {
       timestamp,
       environment: process.env.NODE_ENV || "development",
-      type: "scheduled_post_2h",
+      type: "''scheduled_post_24h''",
       status: "alive_dont_stop",
     },
   };
@@ -133,7 +133,7 @@ if (args.includes("--now")) {
 } else {
   console.log("==================================================");
   console.log("🕒 Servicio Cron 'dont_stop' iniciado");
-  console.log("📅 Programado para ejecutarse cada 2 horas (0 */2 * * *)");
+  console.log("📅 Programado para ejecutarse cada 24 horas (0 0 * * *)");
   console.log("🎯 Endpoint destino:", `${APP_URL}/api/dont-stop`);
   console.log("==================================================\n");
 
@@ -141,7 +141,7 @@ if (args.includes("--now")) {
   sendScheduledPing();
 
   // Schedule to run every 2 hours (0 */2 * * *)
-  cron.schedule("0 */2 * * *", () => {
+  cron.schedule("0 0 * * *", () => {
     sendScheduledPing();
   });
 }
