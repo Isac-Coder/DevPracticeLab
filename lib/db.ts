@@ -163,15 +163,31 @@ export async function initDatabase() {
       }
     }
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_module_subscriptions (
-        id SERIAL PRIMARY KEY,
-        user_id ${userIdColumnType} NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        module_id INTEGER NOT NULL REFERENCES available_modules(id) ON DELETE CASCADE,
-        subscribed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE (user_id, module_id)
-      );
-    `);
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS user_module_subscriptions (
+          id SERIAL PRIMARY KEY,
+          user_id ${userIdColumnType} NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          module_id INTEGER NOT NULL REFERENCES available_modules(id) ON DELETE CASCADE,
+          subscribed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (user_id, module_id)
+        );
+      `);
+    } catch (fkErr) {
+      // Handle cases where users.id uses UUID while our environment expects INTEGER (or viceversa)
+      // If FK cannot be implemented due to incompatible types, create the table without FK
+      const msg = (fkErr as Error).message || "";
+      console.warn("⚠️ No se pudo crear FK user_module_subscriptions -> users(id):", msg);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS user_module_subscriptions (
+          id SERIAL PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          module_id INTEGER NOT NULL,
+          subscribed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (user_id, module_id)
+        );
+      `);
+    }
 
     await client.query(`
       INSERT INTO available_modules (slug, name, description, is_active)
