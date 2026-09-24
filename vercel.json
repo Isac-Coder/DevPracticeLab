@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/dont-stop?cron=true",
+      "schedule": "0 */2 * * *"
+    }
+  ]
+}
