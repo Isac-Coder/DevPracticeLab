@@ -1,7 +1,5 @@
 import { Pool } from "pg";
 
-const connectionString = process.env.DATABASE_URL || "";
-
 declare global {
   // eslint-disable-next-line no-var
   var __dbPool: Pool | undefined;
@@ -22,67 +20,79 @@ declare global {
     payload: unknown;
     created_at: Date;
   }> | undefined;
+  // eslint-disable-next-line no-var
+  var __schemaInitialized: boolean | undefined;
 }
 
-const pool =
-  global.__dbPool ||
-  new Pool({
-    connectionString: connectionString || undefined,
-    ssl: connectionString
-      ? {
-          rejectUnauthorized: false,
-        }
-      : undefined,
-    max: 5,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-  });
+function getConnectionString(): string {
+  return process.env.DATABASE_URL || "";
+}
 
-global.__dbPool = pool;
+export function getPool(): Pool {
+  const connectionString = getConnectionString();
+  if (!global.__dbPool) {
+    global.__dbPool = new Pool({
+      connectionString: connectionString || undefined,
+      ssl: connectionString
+        ? {
+            rejectUnauthorized: false,
+          }
+        : undefined,
+      max: 10,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    });
+  }
+  return global.__dbPool;
+}
 
 // Fallback in-memory stores in case DB connection fails or credentials expire
 if (!global.__mockUsers) global.__mockUsers = [];
 if (!global.__mockDontStop) global.__mockDontStop = [];
 
-let schemaInitialized = false;
-
 export async function initDatabase() {
-  if (schemaInitialized || !connectionString) return;
+  const connectionString = getConnectionString();
+  if (!connectionString) {
+    console.warn("⚠️ No se encontró DATABASE_URL configurada.");
+    return;
+  }
 
+  if (global.__schemaInitialized) return;
+
+  const pool = getPool();
+  const client = await pool.connect();
   try {
-    const client = await pool.connect();
-    try {
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS users (
-          id SERIAL PRIMARY KEY,
-          email VARCHAR(255) UNIQUE NOT NULL,
-          username VARCHAR(100) NOT NULL,
-          password_hash VARCHAR(255) NOT NULL,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(255) UNIQUE NOT NULL,
+        username VARCHAR(100) NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-      await client.query(`
-        CREATE TABLE IF NOT EXISTS dont_stop (
-          id SERIAL PRIMARY KEY,
-          source VARCHAR(100) DEFAULT 'cron_script',
-          message TEXT DEFAULT 'Daily ping - Keep going, do not stop!',
-          payload JSONB DEFAULT '{}'::jsonb,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS dont_stop (
+        id SERIAL PRIMARY KEY,
+        source VARCHAR(100) DEFAULT 'cron_script',
+        message TEXT DEFAULT 'Daily ping - Keep going, do not stop!',
+        payload JSONB DEFAULT '{}'::jsonb,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-      schemaInitialized = true;
-      console.log("✅ Supabase PostgreSQL: Tables verified/created successfully.");
-    } finally {
-      client.release();
-    }
+    global.__schemaInitialized = true;
+    console.log("✅ Supabase PostgreSQL: Tablas verificadas y creadas correctamente.");
   } catch (error) {
-    console.warn(
-      "⚠️ PostgreSQL connection warning (operating in resilient fallback mode):",
+    console.error(
+      "❌ Error al inicializar/verificar tablas en PostgreSQL:",
       (error as Error).message
     );
+    throw error;
+  } finally {
+    client.release();
   }
 }
 
@@ -104,8 +114,10 @@ export async function createUser(
   username: string,
   passwordHash: string
 ): Promise<UserRecord> {
-  await initDatabase();
-  try {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    const pool = getPool();
     const res = await pool.query(
       `INSERT INTO users (email, username, password_hash)
        VALUES ($1, $2, $3)
@@ -113,30 +125,32 @@ export async function createUser(
       [email.toLowerCase().trim(), username.trim(), passwordHash]
     );
     return res.rows[0];
-  } catch (err) {
-    console.warn("Falling back to local user store:", (err as Error).message);
-    const existing = global.__mockUsers!.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase().trim()
-    );
-    if (existing) {
-      throw new Error("El correo electrónico ya está registrado");
-    }
-    const newUser: UserRecord = {
-      id: global.__mockUsers!.length + 1,
-      email: email.toLowerCase().trim(),
-      username: username.trim(),
-      password_hash: passwordHash,
-      created_at: new Date(),
-      updated_at: new Date(),
-    };
-    global.__mockUsers!.push(newUser);
-    return newUser;
   }
+
+  // Fallback if no DATABASE_URL configured
+  const existing = global.__mockUsers!.find(
+    (u) => u.email.toLowerCase() === email.toLowerCase().trim()
+  );
+  if (existing) {
+    throw new Error("El correo electrónico ya está registrado");
+  }
+  const newUser: UserRecord = {
+    id: global.__mockUsers!.length + 1,
+    email: email.toLowerCase().trim(),
+    username: username.trim(),
+    password_hash: passwordHash,
+    created_at: new Date(),
+    updated_at: new Date(),
+  };
+  global.__mockUsers!.push(newUser);
+  return newUser;
 }
 
 export async function findUserByEmail(email: string): Promise<UserRecord | null> {
-  await initDatabase();
-  try {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    const pool = getPool();
     const res = await pool.query(
       `SELECT id, email, username, password_hash, created_at, updated_at
        FROM users
@@ -145,18 +159,19 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
       [email.trim()]
     );
     return res.rows[0] || null;
-  } catch (err) {
-    console.warn("Reading from local user store:", (err as Error).message);
-    const user = global.__mockUsers!.find(
-      (u) => u.email.toLowerCase() === email.toLowerCase().trim()
-    );
-    return user || null;
   }
+
+  const user = global.__mockUsers!.find(
+    (u) => u.email.toLowerCase() === email.toLowerCase().trim()
+  );
+  return user || null;
 }
 
 export async function findUserById(id: number | string): Promise<UserRecord | null> {
-  await initDatabase();
-  try {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    const pool = getPool();
     const res = await pool.query(
       `SELECT id, email, username, password_hash, created_at, updated_at
        FROM users
@@ -165,11 +180,62 @@ export async function findUserById(id: number | string): Promise<UserRecord | nu
       [id]
     );
     return res.rows[0] || null;
-  } catch (err) {
-    console.warn("Reading from local user store:", (err as Error).message);
-    const user = global.__mockUsers!.find((u) => u.id === Number(id));
-    return user || null;
   }
+
+  const user = global.__mockUsers!.find((u) => u.id === Number(id));
+  return user || null;
+}
+
+export async function updateUser(
+  id: number | string,
+  data: { email?: string; username?: string; passwordHash?: string }
+): Promise<UserRecord> {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    const pool = getPool();
+    const updates: string[] = [];
+    const values: unknown[] = [];
+    let idx = 1;
+
+    if (data.email) {
+      updates.push(`email = $${idx++}`);
+      values.push(data.email.toLowerCase().trim());
+    }
+    if (data.username) {
+      updates.push(`username = $${idx++}`);
+      values.push(data.username.trim());
+    }
+    if (data.passwordHash) {
+      updates.push(`password_hash = $${idx++}`);
+      values.push(data.passwordHash);
+    }
+    updates.push(`updated_at = CURRENT_TIMESTAMP`);
+
+    values.push(id);
+    const queryStr = `
+      UPDATE users
+      SET ${updates.join(", ")}
+      WHERE id = $${idx}
+      RETURNING id, email, username, password_hash, created_at, updated_at
+    `;
+
+    const res = await pool.query(queryStr, values);
+    if (res.rows.length === 0) {
+      throw new Error("Usuario no encontrado.");
+    }
+    return res.rows[0];
+  }
+
+  const user = global.__mockUsers!.find((u) => u.id === Number(id));
+  if (!user) {
+    throw new Error("Usuario no encontrado.");
+  }
+  if (data.email) user.email = data.email.toLowerCase().trim();
+  if (data.username) user.username = data.username.trim();
+  if (data.passwordHash) user.password_hash = data.passwordHash;
+  user.updated_at = new Date();
+  return user;
 }
 
 // ==========================================
@@ -189,8 +255,10 @@ export async function createDontStopEntry(
   message = "Daily ping - Keep going, do not stop!",
   payload: Record<string, unknown> = {}
 ): Promise<DontStopRecord> {
-  await initDatabase();
-  try {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    const pool = getPool();
     const res = await pool.query(
       `INSERT INTO dont_stop (source, message, payload)
        VALUES ($1, $2, $3)
@@ -198,23 +266,24 @@ export async function createDontStopEntry(
       [source, message, JSON.stringify(payload)]
     );
     return res.rows[0];
-  } catch (err) {
-    console.warn("Falling back to local dont_stop store:", (err as Error).message);
-    const newEntry: DontStopRecord = {
-      id: global.__mockDontStop!.length + 1,
-      source,
-      message,
-      payload,
-      created_at: new Date(),
-    };
-    global.__mockDontStop!.push(newEntry);
-    return newEntry;
   }
+
+  const newEntry: DontStopRecord = {
+    id: global.__mockDontStop!.length + 1,
+    source,
+    message,
+    payload,
+    created_at: new Date(),
+  };
+  global.__mockDontStop!.push(newEntry);
+  return newEntry;
 }
 
 export async function getDontStopEntries(limit = 50): Promise<DontStopRecord[]> {
-  await initDatabase();
-  try {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    const pool = getPool();
     const res = await pool.query(
       `SELECT id, source, message, payload, created_at
        FROM dont_stop
@@ -223,17 +292,17 @@ export async function getDontStopEntries(limit = 50): Promise<DontStopRecord[]> 
       [limit]
     );
     return res.rows;
-  } catch (err) {
-    console.warn("Reading from local dont_stop store:", (err as Error).message);
-    return [...global.__mockDontStop!]
-      .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
-      .slice(0, limit);
   }
+
+  return [...global.__mockDontStop!]
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
+    .slice(0, limit);
 }
 
 export async function query(text: string, params?: unknown[]) {
   await initDatabase();
+  const pool = getPool();
   return pool.query(text, params);
 }
 
-export default pool;
+export default getPool;

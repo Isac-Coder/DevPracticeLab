@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
+import { findUserById } from "@/lib/db";
 
 export async function GET() {
   try {
@@ -12,12 +13,16 @@ export async function GET() {
       );
     }
 
+    const userDb = await findUserById(session.userId);
+
     return NextResponse.json({
       authenticated: true,
       user: {
         id: session.userId,
-        email: session.email,
-        username: session.username,
+        email: userDb?.email || session.email,
+        username: userDb?.username || session.username,
+        created_at: userDb?.created_at || null,
+        updated_at: userDb?.updated_at || null,
       },
     });
   } catch (error) {

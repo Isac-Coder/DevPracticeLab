@@ -1,158 +1,237 @@
-# 🖥️ DevPracticeLab
+# 🧠 DevPracticeLab
 
-Plataforma interactiva para practicar comandos de **SSH**, **Docker** y **PostgreSQL** en terminales simuladas, sin necesidad de configurar servidores reales.
+Plataforma interactiva para practicar **SSH**, **Docker**, **PostgreSQL**, **TypeScript** y **Next.js** desde terminales simuladas, sin requerir servidores reales ni configuración externa.
 
-Construido con [Next.js](https://nextjs.org) 16, [React](https://react.dev) 19, [Tailwind CSS](https://tailwindcss.com) 4 y [Lucide Icons](https://lucide.dev).
+Construido con [Next.js](https://nextjs.org) 16.3.6, [React](https://react.dev) 19, [Tailwind CSS](https://tailwindcss.com) 4 y [Lucide React](https://lucide.dev).
 
 ---
 
-## ✨ Características
+## ✨ Características principales
 
-- **Autenticación completa** (`/login`, `/register`) — Registro e inicio de sesión conectado a base de datos PostgreSQL en Supabase con hash de contraseñas (`bcryptjs`) y tokens de sesión JWT (`jose`).
-- **Endpoint y Cron `dont_stop` (cada 2 horas)** (`/api/dont-stop`) — Servicio programado para ejecutarse cada 2 horas (mediante Vercel Cron en producción o script local con `node-cron`) enviando registros a la tabla `dont_stop` en Supabase PostgreSQL.
-- **Dashboard** (`/`) — Página principal con explicación de la app, estado de usuario, tarjetas de selección y guía de uso.
-- **Práctica SSH** (`/ssh`) — Terminal con tema verde estilo Linux. Simula conexiones a servidores, generación de claves, transferencia de archivos y navegación de sistema de archivos.
-- **Práctica Docker** (`/docker`) — Terminal con tema azul. Gestión de contenedores, imágenes, redes, volúmenes y Docker Compose.
-- **Práctica PostgreSQL** (`/postgres`) — Terminal con tema índigo. Consultas SQL con tablas pre-cargadas, soporte para SELECT, INSERT, UPDATE, DELETE, CREATE TABLE, y meta-comandos psql.
-- **Comando `--help`** disponible en cada terminal con la lista completa de comandos.
-- **Historial de comandos** con flechas arriba/abajo y `clear` para limpiar.
-- **Estilo adaptativo** — cada página cambia su paleta de colores según la tecnología seleccionada.
+- **Reto semanal con lógica de bloqueo y progreso** (`/challenges`)
+  - 250 retos repartidos en 5 módulos: SSH, Docker, PostgreSQL, TypeScript y Next.js
+  - validación de respuestas
+  - bloqueo de retos repetidos si se fallan o si ya están completados
+  - restricción por semana: no se puede avanzar a la siguiente si la anterior no está completada
+  - paginación con grupos de 6 retos por página y límite visual de 5 números de paginación
+  - revelación de la solución solo tras varios intentos fallidos o cuando el reto se completa con éxito
+
+- **Documentación oficial sincronizada con la web** (`/docs`, `/api/docs`)
+  - búsqueda por módulo: SSH, Docker, PostgreSQL, TypeScript y Next.js
+  - filtro por conceptos, comandos o temas del módulo activo
+  - extracción textual y renderizado de contenido relevante, no solo enlaces planos
+  - soporte opcional para Gemini API key
+  - fallback a páginas oficiales y scraping con contenido legible
+
+- **Práctica de TypeScript con editor real** (`/typescript`)
+  - compilación con TypeScript en navegador
+  - feedback de errores de compilación
+  - edición de ejemplos y validación sobre código real
+
+- **Práctica de Next.js** (`/nextjs`)
+  - módulo adicional dedicado a App Router, layouts, rendering, rutas y metadata
+  - integración con el mismo sistema de progreso y editor de código
+
+- **Autenticación y gestión de cuenta** (`/login`, `/register`, `/account`)
+  - registro con hash bcrypt
+  - login con JWT en cookies HTTP-only
+  - edición de perfil y validación de contraseña actual
+
+- **Tracking de progreso por módulo**
+  - métricas de comandos ejecutados y únicos
+  - estado global del dashboard
+  - barra de dominio por tecnología
+
+- **Terminales simuladas por módulo**
+  - `SSH`: conexiones remotas, claves, archivos, prompt interactivo
+  - `Docker`: contenedores, redes, volúmenes, compose
+  - `PostgreSQL`: consultas SQL y psql simulados
+  - `TypeScript`: edición y compilación
+  - `Next.js`: conceptos y app router
+
+- **UX móvil mejorada**
+  - menú hamburguesa vertical superpuesto sobre la página
+  - responsive y sin romper el ancho del contenido
+
+- **Cron para `dont_stop`** (`/api/dont-stop`)
+  - registros periódicos cada 2 horas para monitorización de actividad
 
 ---
 
 ## 📁 Estructura del proyecto
 
-```
+```text
 app/
-├── components/                 # Componentes globales reutilizables
-│   ├── Navbar.tsx              # Barra de navegación (presente en todas las páginas)
-│   ├── SimulatedTerminal.tsx   # Terminal interactiva configurable
-│   └── PracticeCard.tsx        # Tarjetas de selección del dashboard
-├── ssh/                        # Módulo de práctica SSH
-│   ├── page.tsx                # Página /ssh — tema verde
-│   └── commands.ts             # Comandos simulados: ssh, scp, ssh-keygen, ls, cd, etc.
-├── docker/                     # Módulo de práctica Docker
-│   ├── page.tsx                # Página /docker — tema azul
-│   └── commands.ts             # Comandos simulados: docker run, ps, images, compose, etc.
-├── postgres/                   # Módulo de práctica PostgreSQL
-│   ├── page.tsx                # Página /postgres — tema índigo
-│   └── commands.ts             # Comandos simulados: SELECT, INSERT, \dt, \d, etc.
-├── page.tsx                    # Dashboard principal (/)
-├── layout.tsx                  # Layout raíz
-├── globals.css                 # Estilos globales + scrollbar + cursor
-└── favicon.ico
-public/                         # Archivos estáticos
+├── account/
+│   └── page.tsx
+├── api/
+│   ├── auth/
+│   │   ├── login/route.ts
+│   │   ├── logout/route.ts
+│   │   ├── me/route.ts
+│   │   ├── register/route.ts
+│   │   └── update-account/route.ts
+│   ├── docs/route.ts
+│   └── dont-stop/route.ts
+├── challenges/
+│   └── page.tsx
+├── components/
+│   ├── CodePracticeEditor.tsx
+│   ├── Navbar.tsx
+│   ├── PracticeAuthGuard.tsx
+│   ├── PracticeCard.tsx
+│   ├── PracticeProgressBar.tsx
+│   └── SimulatedTerminal.tsx
+├── docs/
+│   └── page.tsx
+├── docker/
+│   ├── commands.ts
+│   └── page.tsx
+├── login/
+│   └── page.tsx
+├── nextjs/
+│   ├── page.tsx
+│   └── commands.ts
+├── postgres/
+│   ├── commands.ts
+│   └── page.tsx
+├── register/
+│   └── page.tsx
+├── ssh/
+│   ├── commands.ts
+│   └── page.tsx
+├── typescript/
+│   ├── commands.ts
+│   └── page.tsx
+├── globals.css
+├── layout.tsx
+├── page.tsx
+├── favicon.ico
+lib/
+├── accountLevel.ts
+├── auth.ts
+├── AuthContext.tsx
+├── challengesData.ts
+├── db.ts
+├── ProgressContext.tsx
+scripts/
+└── daily-dont-stop.js
 ```
 
 ---
 
-## 🚀 Rutas
+## 🚀 Rutas principales
 
-| Ruta                  | Tipo   | Descripción                                   | Tema           |
-| --------------------- | ------ | --------------------------------------------- | -------------- |
-| `/`                   | Página | Dashboard — explicación y selección            | Zinc/Emerald   |
-| `/login`              | Página | Inicio de sesión verificado con backend        | Zinc/Emerald   |
-| `/register`           | Página | Registro de usuarios en PostgreSQL            | Zinc/Emerald   |
-| `/ssh`                | Página | Terminal SSH con servidores simulados           | Verde (green)  |
-| `/docker`             | Página | Terminal Docker con contenedores simulados      | Azul (sky)     |
-| `/postgres`           | Página | Terminal PostgreSQL con tablas pre-cargadas     | Índigo (indigo)|
-| `/api/auth/register`  | API    | POST: Registrar usuario en Supabase Postgres  | Backend        |
-| `/api/auth/login`     | API    | POST: Iniciar sesión y generar JWT en Cookie  | Backend        |
-| `/api/auth/me`        | API    | GET: Obtener usuario autenticado actual       | Backend        |
-| `/api/auth/logout`    | API    | POST: Cerrar sesión                           | Backend        |
-| `/api/dont-stop`      | API    | POST/GET: Envío y consulta a tabla `dont_stop`| Backend        |
+| Ruta | Descripción |
+| --- | --- |
+| `/` | Dashboard con resumen de progreso y acceso a módulos |
+| `/docs` | Documentación técnica oficial por módulo |
+| `/challenges` | Banco de retos semanales y progreso |
+| `/account` | Perfil y configuración del usuario |
+| `/ssh` | Práctica SSH |
+| `/docker` | Práctica Docker |
+| `/postgres` | Práctica PostgreSQL |
+| `/typescript` | Práctica y editor TypeScript |
+| `/nextjs` | Práctica de Next.js |
+| `/login` | Inicio de sesión |
+| `/register` | Registro |
 
 ---
 
-## ⏰ Automatización `dont_stop` (Cada 2 horas)
+## 🧩 Módulos y comportamiento
 
-El proyecto cuenta con ejecución periódica cada 2 horas para mantener la actividad en la tabla `dont_stop`:
+### Retos
+- rotación semanal por módulo
+- validación de cierre y repetición
+- bloqueo de acceso a semanas futuras si no se completan las anteriores
+- soluciones ocultas que aparecen según intentos fallidos o éxito
 
-1. **En Vercel (Producción):** Configurado automáticamente mediante `vercel.json` con Vercel Cron (`0 */2 * * *`).
-2. **En Local / Servidor:** Script `scripts/daily-dont-stop.js` con `node-cron`.
+### Documentación
+- búsqueda basada en el módulo activo
+- extracción de contenido real desde páginas oficiales
+- renderizado en tarjetas de artículo tipo documentación
+- pantalla visualmente más clara y legible
 
-```bash
-# Iniciar el daemon del cron local (cada 2 horas):
-npm run cron:dont-stop
+### Editor de TypeScript / Next.js
+- evaluación del código con TypeScript
+- mensajes de compilación útiles
+- integración con el flujo de práctica del proyecto
 
-# Enviar una petición inmediata a dont_stop:
-npm run cron:ping
+---
+
+## 🗃️ Base de datos
+
+El backend usa PostgreSQL en Supabase y se valida la existencia de tablas al iniciar operaciones de BD.
+
+### Tablas principales
+
+```sql
+CREATE TABLE IF NOT EXISTS public.users (
+  id SERIAL PRIMARY KEY,
+  email VARCHAR(255) UNIQUE NOT NULL,
+  username VARCHAR(100) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.dont_stop (
+  id SERIAL PRIMARY KEY,
+  source VARCHAR(100) DEFAULT 'cron_script',
+  message TEXT DEFAULT 'Daily ping - Keep going, do not stop!',
+  payload JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Variables de entorno requeridas
+
+```env
+DATABASE_URL="postgresql://postgres.[PROJECT_REF]:[PASSWORD]@aws-0-[REGION].pooler.supabase.com:5432/postgres"
+JWT_SECRET="clave-secreta"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
 ```
 
 ---
 
-## 🔧 Tecnologías
-
-- **Next.js 16** — App Router con Turbopack
-- **React 19** — Componentes funcionales con hooks
-- **Tailwind CSS 4** — Diseño responsivo y temas por página
-- **Lucide React** — Iconos SVG consistentes
-- **TypeScript** — Tipado estricto
-
----
-
-## 📦 Instalación
+## ⚙️ Scripts
 
 ```bash
-# Clonar el repositorio
-git clone <repo-url>
-cd practica-ssh
-
-# Instalar dependencias
-npm install
-
-# Iniciar servidor de desarrollo
 npm run dev
+npm run build
+npm run start
+npm run lint
 ```
 
-Abrir [http://localhost:3000](http://localhost:3000) en el navegador.
-
 ---
 
-## 📜 Scripts disponibles
+## 📌 Notas de desarrollo
 
-| Script          | Comando            | Descripción                        |
-| --------------- | ------------------ | ---------------------------------- |
-| `dev`           | `npm run dev`      | Servidor de desarrollo (Turbopack) |
-| `build`         | `npm run build`    | Build de producción                |
-| `start`         | `npm run start`    | Servidor de producción             |
-| `lint`          | `npm run lint`     | Lint con ESLint                    |
-
----
-
-## 🖥️ Terminales simuladas — Comandos disponibles
-
-### SSH (`--help`)
-- `ssh root@<host>` — Conectar a servidor remoto (usuario `root`, contraseña `A12345678`)
-- `ssh-keygen` — Generar par de claves
-- `ssh-copy-id` — Copiar clave pública
-- `scp` — Copiar archivos via SSH
-- `sftp root@<host>` — Sesión SFTP
-- `ls`, `cd`, `pwd`, `cat` — Navegación de archivos
-- `whoami`, `hostname`, `uname` — Info del sistema
-- Servidores: `192.168.1.100`, `10.0.0.50`, `servidor.ejemplo.com` (todos con `root` / `A12345678`)
-
-### Docker (`--help`)
-- `docker run`, `docker ps`, `docker stop`, `docker rm` — Contenedores
-- `docker images`, `docker pull`, `docker rmi`, `docker build` — Imágenes
-- `docker network ls/create`, `docker volume ls/create` — Redes y volúmenes
-- `docker compose up/down` — Orquestación
-- `docker logs`, `docker exec`, `docker stats`, `docker inspect` — Monitoreo
-
-### PostgreSQL (`--help`)
-- `SELECT`, `INSERT`, `UPDATE`, `DELETE` — Operaciones CRUD
-- `CREATE TABLE`, `DROP TABLE`, `ALTER TABLE` — DDL
-- `\dt`, `\d <tabla>`, `\l`, `\du` — Meta-comandos psql
-- Tablas pre-cargadas: `usuarios`, `productos`, `pedidos`
+- Los módulos de práctica están separados por carpeta con `page.tsx` y `commands.ts`.
+- El `Navbar` usa menú hamburguesa en pantallas pequeñas y navegación horizontal en desktop.
+- La documentación oficial se actualiza en función del módulo activo y la búsqueda del usuario.
+- El código se mantiene en TypeScript con strict mode.
+- El proyecto usa App Router de Next.js 16 y Turbopack.
 
 ---
 
 ## 🌐 Deploy
 
-La forma más sencilla de desplegar es usando [Vercel](https://vercel.com/new):
+Se puede desplegar facilmente en Vercel o en cualquier entorno compatible con Next.js.
 
 ```bash
 npm run build
 ```
 
-Consulta la [documentación de despliegue de Next.js](https://nextjs.org/docs/app/building-your-application/deploying) para más opciones.
+---
+
+## ⚖️ Licencia
+
+Este proyecto está protegido con una licencia de uso restringido. Todos los derechos
+sobre el código, estilo, contenido, assets y documentación quedan reservados.
+
+No se permite la reutilización, modificación, redistribución, clonación, venta,
+ni uso como base para otros proyectos sin autorización expresa por escrito del
+propietario del repositorio.
+
+Consulta el archivo [LICENSE](LICENSE) para más detalles.

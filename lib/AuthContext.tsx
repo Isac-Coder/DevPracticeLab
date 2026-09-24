@@ -6,6 +6,8 @@ export interface User {
   id: number | string;
   email: string;
   username: string;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 interface AuthContextType {
@@ -17,6 +19,12 @@ interface AuthContextType {
     username: string,
     password: string
   ) => Promise<{ success: boolean; error?: string }>;
+  updateAccount: (params: {
+    currentPassword: string;
+    email?: string;
+    username?: string;
+    newPassword?: string;
+  }) => Promise<{ success: boolean; error?: string; message?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
 }
@@ -91,6 +99,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateAccount = async (params: {
+    currentPassword: string;
+    email?: string;
+    username?: string;
+    newPassword?: string;
+  }) => {
+    try {
+      const res = await fetch("/api/auth/update-account", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(params),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || "Error al actualizar la cuenta." };
+      }
+
+      if (data.user) {
+        setUser(data.user);
+      }
+      return { success: true, message: data.message };
+    } catch {
+      return { success: false, error: "Error de conexión con el servidor" };
+    }
+  };
+
   const logout = async () => {
     try {
       await fetch("/api/auth/logout", { method: "POST" });
@@ -108,6 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         login,
         register,
+        updateAccount,
         logout,
         refreshUser,
       }}

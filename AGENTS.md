@@ -10,95 +10,135 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ---
 
-# DevPracticeLab — Contexto del Proyecto
+# DevPracticeLab — Contexto actualizado del proyecto
 
 ## Descripción
 
-Plataforma interactiva para practicar comandos de **SSH**, **Docker** y **PostgreSQL** en terminales simuladas dentro del navegador. No requiere servidores reales ni configuración externa.
+Plataforma educativa de práctica técnica para **SSH**, **Docker**, **PostgreSQL**, **TypeScript** y **Next.js**. La app combina terminales simuladas, retos progresivos, documentación oficial y ejercicios de código dentro de una sola experiencia de aprendizaje.
 
 ## Stack tecnológico
 
-- **Framework:** Next.js 16.3.6 (App Router, Turbopack)
-- **UI:** React 19.2.8, Tailwind CSS 4, Lucide React
-- **Lenguaje:** TypeScript 5 (strict mode)
-- **Base de datos:** Supabase PostgreSQL (`pg` pooler)
-- **Autenticación:** `bcryptjs` (hash) + `jose` (JWT HTTP-only cookies)
-- **Tareas programadas:** `node-cron`
-- **Build tool:** Turbopack (integrado en Next.js)
+- **Framework:** Next.js 16.3.6 (App Router + Turbopack)
+- **UI:** React 19, Tailwind CSS 4, Lucide React
+- **Lenguaje:** TypeScript 5 en strict mode
+- **Base de datos:** PostgreSQL en Supabase (`pg` pool)
+- **Auth:** `bcryptjs` + `jose` + JWT HTTP-only cookies
+- **Programación temporal:** `node-cron`
+- **Build tool:** Turbopack integrado en Next.js
+
+## Cambios recientes y estado actual
+
+- **Retos mejorados:** validación de respuestas, bloqueo de repetición, selección de semana, paginación de 6 retos por página, límite visual de 5 números de paginación, restricción de semanas futuras y revelación de soluciones después de fallos o éxito.
+- **Banco de retos ampliado:** 50 desafíos por módulo para SSH, Docker, PostgreSQL, TypeScript y Next.js, con rotación semanal y filtro por módulo.
+- **Documentación oficial más útil:** búsqueda por módulo, extracción textual desde páginas oficiales, renderizado de contenido documental real, no URLs en bruto; soporte opcional para Gemini API key.
+- **Next.js añadido como módulo oficial:** ruta `/nextjs`, documentación, práctica y editor de código.
+- **TypeScript mejorado:** editor de práctica con feedback de compilación real y ejemplos interactivos.
+- **UX móvil ajustada:** menú hamburguesa vertical superpuesto para pantallas pequeñas, sin romper el ancho del contenido.
+- **Diseño visual del docs page refinado:** más legible, menos saturado y más orientado a contenido editorial.
 
 ## Arquitectura
 
-```
+```text
 app/
-├── api/                        # Backend API Routes
+├── account/
+│   └── page.tsx
+├── api/
 │   ├── auth/
-│   │   ├── register/route.ts   # POST: Registrar usuarios con password hash
-│   │   ├── login/route.ts      # POST: Autenticar usuarios y emitir JWT
-│   │   ├── me/route.ts         # GET: Obtener sesión actual
-│   │   └── logout/route.ts     # POST: Limpiar cookie de sesión
-│   └── dont-stop/route.ts      # POST/GET: Inserción y consulta en tabla dont_stop
-├── components/                 # Componentes globales reutilizables
-│   ├── Navbar.tsx              # Barra de navegación con estado de auth
-│   ├── SimulatedTerminal.tsx   # Terminal interactiva genérica
-│   └── PracticeCard.tsx        # Tarjeta de selección para el dashboard
-├── login/                      # Página de inicio de sesión (/login)
+│   │   ├── login/route.ts
+│   │   ├── logout/route.ts
+│   │   ├── me/route.ts
+│   │   ├── register/route.ts
+│   │   └── update-account/route.ts
+│   ├── docs/route.ts
+│   └── dont-stop/route.ts
+├── challenges/
 │   └── page.tsx
-├── register/                   # Página de registro (/register)
+├── components/
+│   ├── CodePracticeEditor.tsx
+│   ├── Navbar.tsx
+│   ├── PracticeAuthGuard.tsx
+│   ├── PracticeCard.tsx
+│   ├── PracticeProgressBar.tsx
+│   └── SimulatedTerminal.tsx
+├── docs/
 │   └── page.tsx
-├── ssh/                        # Módulo SSH — tema verde (green)
-│   ├── page.tsx                # Ruta /ssh — Client Component
-│   └── commands.ts             # Lógica de comandos SSH simulados
-├── docker/                     # Módulo Docker — tema azul (sky)
-│   ├── page.tsx                # Ruta /docker — Client Component
-│   └── commands.ts             # Lógica de comandos Docker simulados
-├── postgres/                   # Módulo PostgreSQL — tema índigo
-│   ├── page.tsx                # Ruta /postgres — Client Component
-│   └── commands.ts             # Lógica de comandos SQL y psql simulados
-├── page.tsx                    # Dashboard (/) — Client Component
-├── layout.tsx                  # RootLayout con AuthProvider
-├── globals.css                 # Tailwind CSS 4 + estilos globales
-└── favicon.ico
+├── docker/
+│   ├── commands.ts
+│   └── page.tsx
+├── login/
+│   └── page.tsx
+├── nextjs/
+│   ├── page.tsx
+│   └── commands.ts
+├── postgres/
+│   ├── commands.ts
+│   └── page.tsx
+├── register/
+│   └── page.tsx
+├── ssh/
+│   ├── commands.ts
+│   └── page.tsx
+├── typescript/
+│   ├── commands.ts
+│   └── page.tsx
+├── globals.css
+├── layout.tsx
+├── page.tsx
 lib/
-├── db.ts                       # Pool de PostgreSQL, inicialización de esquemas y queries
-├── auth.ts                     # Funciones de hashing bcrypt y JWT jose
-└── AuthContext.tsx             # Contexto React de autenticación en frontend
+├── accountLevel.ts
+├── auth.ts
+├── AuthContext.tsx
+├── challengesData.ts
+├── db.ts
+├── ProgressContext.tsx
 scripts/
-└── daily-dont-stop.js          # Script cron backend para enviar POST periódico (cada 2h) a dont_stop
+└── daily-dont-stop.js
 ```
 
-## Convenciones
+## Base de datos y auth
 
-- **Tema por página:** Cada módulo (ssh, docker, postgres) tiene su propia paleta de colores que se aplica al fondo, terminal, header y sidebar.
-- **Componentes globales** en `app/components/` — reutilizados por todas las páginas.
-- **Comandos separados** en archivos `commands.ts` dentro de cada carpeta de módulo. Exportan una función factory (`getSSHCommands()`, `getDockerCommands()`, `getPostgresCommands()`) que reinicia el estado y devuelve un `Record<string, (args: string[]) => CommandResult>`.
-- **SimulatedTerminal** es un componente genérico que recibe un `TerminalConfig` con: prompt, welcome message, mapa de comandos y tema visual.
-- Las páginas de práctica (`/ssh`, `/docker`, `/postgres`) son **Client Components** (`"use client"`).
-- La página principal (`/`) también es Client Component porque pasa funciones (iconos de Lucide) como props a `PracticeCard`.
-- El `layout.tsx` es **Server Component** — no agregar `"use client"` ahí.
+- **Usa PostgreSQL + Supabase** con validación automática de tablas antes de CRUD.
+- **Usuarios**: `email`, `username`, `password_hash`, `created_at`, `updated_at`.
+- **`dont_stop`**: `source`, `message`, `payload`, `created_at`.
+- **JWT** en cookies HTTP-only y `bcryptjs` para hashing.
+- Variables mínimas: `DATABASE_URL`, `JWT_SECRET`, `NEXT_PUBLIC_APP_URL`.
 
-## Rutas
+## Convenciones clave
 
-| Ruta        | Componente               | Tipo               |
-| ----------- | ------------------------ | -------------------|
-| `/`         | `app/page.tsx`           | Client Component   |
-| `/ssh`      | `app/ssh/page.tsx`       | Client Component   |
-| `/docker`   | `app/docker/page.tsx`    | Client Component   |
-| `/postgres` | `app/postgres/page.tsx`  | Client Component   |
+- Las rutas protegidas requieren autenticación.
+- Progress contextualizado por módulo y por usuario.
+- `SimulatedTerminal` incluye historial de comandos, `clear`, scroll y copiado.
+- Cada módulo tiene su propio esquema visual.
+- La documentación oficial se organiza por módulo y por contenido buscado.
+- El menú móvil usa overlay vertical para no romper el ancho de la página.
 
-## Comandos
+## Rutas principales
+
+| Ruta | Tipo | Comentario |
+| --- | --- | --- |
+| `/` | Client Component | Dashboard |
+| `/docs` | Client Component | Docs con búsqueda y scraping |
+| `/challenges` | Client Component | Retos con bloqueo y paginación |
+| `/account` | Client Component | Perfil y cuenta |
+| `/ssh` | Client Component | Terminal SSH |
+| `/docker` | Client Component | Terminal Docker |
+| `/postgres` | Client Component | Terminal PostgreSQL |
+| `/typescript` | Client Component | Editor TypeScript |
+| `/nextjs` | Client Component | Módulo Next.js |
+
+## Comandos de ejecución
 
 ```bash
-npm run dev      # Servidor de desarrollo (Turbopack, puerto 3000)
-npm run build    # Build de producción
-npm run start    # Servidor de producción
-npm run lint     # ESLint
+npm run dev
+npm run build
+npm run start
+npm run lint
 ```
 
 ## Notas importantes
 
-- Al agregar un nuevo módulo de práctica, crear una carpeta en `app/<nombre>/` con `page.tsx` y `commands.ts`, y agregar la entrada al `Navbar.tsx` y al dashboard `page.tsx`.
-- Los comandos de cada terminal se reinician al cambiar de vista (el estado es local al componente con `useMemo`).
-- El componente `SimulatedTerminal` soporta historial de comandos (flechas arriba/abajo), `clear`, y scroll automático.
-- PostgreSQL soporta parsing básico de SQL: SELECT con WHERE/ORDER BY/LIMIT, INSERT, UPDATE, DELETE, CREATE/DROP/ALTER TABLE.
-- SSH simula 3 servidores con usuario `root` y contraseña `A12345678`, prompt interactivo de contraseña, sistema de archivos básico y generación de claves.
-- Todas las terminales permiten selección/copia de texto nativa y cuentan con un botón de **Copiar** en el header para copiar todo el contenido al portapapeles.
+- La inteligencia de docs está enfocada en contenido oficial y relevante, no en enlaces sin contexto.
+- La búsqueda filtra por coincidencias reales del término buscado.
+- Los retos no permiten reintentos ilimitados ni saltos de semana sin completar la previa.
+- El proyecto fue ampliado con soporte de flujo de práctica para Next.js y TypeScript real.
+- El proyecto está protegido por una licencia de uso restringido: no se permite reutilizar, clonar, redistribuir, modificar ni vender el código ni el contenido sin permiso explícito del propietario.

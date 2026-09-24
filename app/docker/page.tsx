@@ -5,6 +5,9 @@ import { Container, ArrowLeft, Box, Layers, HardDrive, GitBranch } from "lucide-
 import Link from "next/link";
 import Navbar from "@/app/components/Navbar";
 import SimulatedTerminal, { type TerminalConfig } from "@/app/components/SimulatedTerminal";
+import PracticeAuthGuard from "@/app/components/PracticeAuthGuard";
+import { ModuleProgressBar } from "@/app/components/PracticeProgressBar";
+import { usePracticeProgress } from "@/lib/ProgressContext";
 import { getDockerCommands, dockerWelcome } from "./commands";
 
 const tips = [
@@ -31,11 +34,14 @@ const tips = [
 ];
 
 export default function DockerPage() {
+  const { recordCommand } = usePracticeProgress();
+
   const terminalConfig: TerminalConfig = useMemo(
     () => ({
       prompt: "root@docker-host:~# ",
       welcomeMessage: dockerWelcome,
       commands: getDockerCommands(),
+      onCommandRun: (cmd: string) => recordCommand("docker", cmd),
       theme: {
         bg: "bg-slate-950",
         text: "text-sky-300",
@@ -46,7 +52,7 @@ export default function DockerPage() {
         headerDots: ["bg-red-500", "bg-yellow-500", "bg-green-500"],
       },
     }),
-    []
+    [recordCommand]
   );
 
   return (
@@ -82,47 +88,56 @@ export default function DockerPage() {
         </section>
 
         <div className="mx-auto max-w-7xl px-6 py-10">
-          <div className="grid gap-8 lg:grid-cols-3">
-            {/* Terminal */}
-            <div className="lg:col-span-2">
-              <SimulatedTerminal config={terminalConfig} />
+          <PracticeAuthGuard
+            moduleName="Docker"
+            moduleIcon={Container}
+            themeColor="sky"
+          >
+            <div className="mb-6">
+              <ModuleProgressBar module="docker" />
             </div>
 
-            {/* Tips sidebar */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-white">
-                Consejos Docker
-              </h3>
-              {tips.map((tip, i) => (
-                <div
-                  key={i}
-                  className="rounded-xl border border-sky-900/30 bg-slate-900/50 p-4"
-                >
-                  <div className="mb-2 flex items-center gap-2">
-                    <tip.icon className="h-4 w-4 text-sky-400" />
-                    <span className="text-sm font-medium text-white">
-                      {tip.title}
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-400">{tip.desc}</p>
-                </div>
-              ))}
+            <div className="grid gap-8 lg:grid-cols-3">
+              {/* Terminal */}
+              <div className="lg:col-span-2">
+                <SimulatedTerminal config={terminalConfig} />
+              </div>
 
-              <div className="rounded-xl border border-sky-900/30 bg-sky-950/30 p-4">
-                <h4 className="mb-2 text-sm font-medium text-sky-400">
-                  🐳 Contenedores activos
-                </h4>
-                <div className="space-y-1 text-xs text-zinc-300 font-mono">
-                  <p>• web-server (nginx:latest)</p>
-                  <p>• api-backend (node:20-alpine)</p>
+              {/* Tips sidebar */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-white">
+                  Consejos Docker
+                </h3>
+                {tips.map((tip, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl border border-sky-900/30 bg-slate-900/50 p-4"
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <tip.icon className="h-4 w-4 text-sky-400" />
+                      <span className="text-sm font-medium text-white">
+                        {tip.title}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400">{tip.desc}</p>
+                  </div>
+                ))}
+
+                <div className="rounded-xl border border-sky-900/30 bg-sky-950/30 p-4">
+                  <h4 className="mb-2 text-sm font-medium text-sky-400">
+                    🐳 Contenedores activos
+                  </h4>
+                  <div className="space-y-1 text-xs text-zinc-300 font-mono">
+                    <p>• web-server (nginx:latest)</p>
+                    <p>• api-backend (node:20-alpine)</p>
+                  </div>
+                  <p className="mt-2 text-xs text-zinc-500">
+                    Usa <code className="text-sky-300">docker ps</code> para verlos
+                  </p>
                 </div>
-                <p className="mt-2 text-xs text-zinc-500">
-                  Usa <code className="text-sky-300">docker ps</code> para ver
-                  el estado actual
-                </p>
               </div>
             </div>
-          </div>
+          </PracticeAuthGuard>
         </div>
       </main>
     </div>

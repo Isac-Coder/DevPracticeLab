@@ -22,6 +22,7 @@ export interface TerminalConfig {
     headerDots: [string, string, string];
   };
   onPasswordSubmit?: (password: string, context: string) => CommandResult;
+  onCommandRun?: (command: string) => void;
 }
 
 interface HistoryEntry {
@@ -123,6 +124,7 @@ export default function SimulatedTerminal({ config }: { config: TerminalConfig }
 
       if (config.commands[cmd]) {
         result = config.commands[cmd](args);
+        config.onCommandRun?.(trimmed);
       } else {
         result = {
           output: `Command not found: ${cmd}. Type --help for available commands.`,

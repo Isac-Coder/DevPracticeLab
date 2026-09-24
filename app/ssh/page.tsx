@@ -5,6 +5,9 @@ import { Server, ArrowLeft, Shield, Key, FileUp, Network } from "lucide-react";
 import Link from "next/link";
 import Navbar from "@/app/components/Navbar";
 import SimulatedTerminal, { type TerminalConfig } from "@/app/components/SimulatedTerminal";
+import PracticeAuthGuard from "@/app/components/PracticeAuthGuard";
+import { ModuleProgressBar } from "@/app/components/PracticeProgressBar";
+import { usePracticeProgress } from "@/lib/ProgressContext";
 import { getSSHCommands, sshWelcome, handleSSHPassword } from "./commands";
 
 const tips = [
@@ -31,12 +34,15 @@ const tips = [
 ];
 
 export default function SSHPage() {
+  const { recordCommand } = usePracticeProgress();
+
   const terminalConfig: TerminalConfig = useMemo(
     () => ({
       prompt: "root@localhost:~# ",
       welcomeMessage: sshWelcome,
       commands: getSSHCommands(),
       onPasswordSubmit: handleSSHPassword,
+      onCommandRun: (cmd: string) => recordCommand("ssh", cmd),
       theme: {
         bg: "bg-gray-950",
         text: "text-green-400",
@@ -47,7 +53,7 @@ export default function SSHPage() {
         headerDots: ["bg-red-500", "bg-yellow-500", "bg-green-500"],
       },
     }),
-    []
+    [recordCommand]
   );
 
   return (
@@ -83,50 +89,57 @@ export default function SSHPage() {
         </section>
 
         <div className="mx-auto max-w-7xl px-6 py-10">
-          <div className="grid gap-8 lg:grid-cols-3">
-            {/* Terminal */}
-            <div className="lg:col-span-2">
-              <SimulatedTerminal config={terminalConfig} />
+          <PracticeAuthGuard
+            moduleName="SSH"
+            moduleIcon={Server}
+            themeColor="green"
+          >
+            <div className="mb-6">
+              <ModuleProgressBar module="ssh" />
             </div>
 
-            {/* Tips sidebar */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold text-white">
-                Consejos SSH
-              </h3>
-              {tips.map((tip, i) => (
-                <div
-                  key={i}
-                  className="rounded-xl border border-green-900/30 bg-gray-900/50 p-4"
-                >
-                  <div className="mb-2 flex items-center gap-2">
-                    <tip.icon className="h-4 w-4 text-green-400" />
-                    <span className="text-sm font-medium text-white">
-                      {tip.title}
-                    </span>
-                  </div>
-                  <p className="text-xs text-zinc-400">{tip.desc}</p>
-                </div>
-              ))}
+            <div className="grid gap-8 lg:grid-cols-3">
+              {/* Terminal */}
+              <div className="lg:col-span-2">
+                <SimulatedTerminal config={terminalConfig} />
+              </div>
 
-              <div className="rounded-xl border border-green-900/30 bg-green-950/30 p-4">
-                <h4 className="mb-2 text-sm font-medium text-green-400">
-                  🖥️ Servidores disponibles
-                </h4>
-                <div className="space-y-1 text-xs text-zinc-300 font-mono">
-                  <p>• 192.168.1.100 (Ubuntu)</p>
-                  <p>• 10.0.0.50 (Debian)</p>
-                  <p>• servidor.ejemplo.com (CentOS)</p>
+              {/* Tips sidebar */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-white">
+                  Consejos SSH
+                </h3>
+                {tips.map((tip, i) => (
+                  <div
+                    key={i}
+                    className="rounded-xl border border-green-900/30 bg-gray-900/50 p-4"
+                  >
+                    <div className="mb-2 flex items-center gap-2">
+                      <tip.icon className="h-4 w-4 text-green-400" />
+                      <span className="text-sm font-medium text-white">
+                        {tip.title}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400">{tip.desc}</p>
+                  </div>
+                ))}
+
+                <div className="rounded-xl border border-green-900/30 bg-green-950/30 p-4">
+                  <h4 className="mb-2 text-sm font-medium text-green-400">
+                    🖥️ Servidores disponibles
+                  </h4>
+                  <div className="space-y-1 text-xs text-zinc-300 font-mono">
+                    <p>• 192.168.1.100 (Ubuntu)</p>
+                    <p>• 10.0.0.50 (Debian)</p>
+                    <p>• servidor.ejemplo.com (CentOS)</p>
+                  </div>
+                  <p className="mt-2 text-xs text-zinc-500">
+                    Usuario: <code className="text-green-400">root</code> | Contraseña: <code className="text-green-400">A12345678</code>
+                  </p>
                 </div>
-                <p className="mt-2 text-xs text-zinc-500">
-                  Usuario: <code className="text-green-300">root</code>
-                </p>
-                <p className="text-xs text-zinc-500">
-                  Contraseña: <code className="text-green-300">A12345678</code>
-                </p>
               </div>
             </div>
-          </div>
+          </PracticeAuthGuard>
         </div>
       </main>
     </div>
