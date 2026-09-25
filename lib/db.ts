@@ -37,6 +37,17 @@ declare global {
     subscribed_at: Date;
   }> | undefined;
   // eslint-disable-next-line no-var
+  var __mockUserApiKeys: Array<{
+    id: number;
+    user_id: number | string;
+    provider: string;
+    api_key: string;
+    base_url?: string;
+    model?: string;
+    is_active: boolean;
+    updated_at: Date;
+  }> | undefined;
+  // eslint-disable-next-line no-var
   var __schemaInitialized: boolean | undefined;
 }
 
@@ -75,6 +86,7 @@ if (!global.__mockAvailableModules) {
   ];
 }
 if (!global.__mockUserSubscriptions) global.__mockUserSubscriptions = [];
+if (!global.__mockUserApiKeys) global.__mockUserApiKeys = [];
 
 export interface AvailableModuleRecord {
   id: number;
@@ -90,6 +102,17 @@ export interface UserModuleSubscriptionRecord {
   user_id: number;
   module_id: number;
   subscribed_at: Date;
+}
+
+export interface UserApiKeyRecord {
+  id: number;
+  user_id: number | string;
+  provider: string; // 'gemini' | 'ollama'
+  api_key: string;
+  base_url?: string;
+  model?: string;
+  is_active: boolean;
+  updated_at: Date;
 }
 
 export async function initDatabase() {
@@ -187,6 +210,61 @@ export async function initDatabase() {
           UNIQUE (user_id, module_id)
         );
       `);
+    }
+
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS user_api_keys (
+          id SERIAL PRIMARY KEY,
+          user_id ${userIdColumnType} NOT NULL,
+          provider VARCHAR(50) NOT NULL DEFAULT 'gemini',
+          api_key TEXT DEFAULT '',
+          base_url TEXT DEFAULT '',
+          model VARCHAR(100) DEFAULT '',
+          is_active BOOLEAN DEFAULT FALSE,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (user_id, provider)
+        );
+      `);
+    } catch (fkErr) {
+      console.warn("⚠️ Error creando tabla base user_api_keys:", (fkErr as Error).message);
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS user_api_keys (
+          id SERIAL PRIMARY KEY,
+          user_id TEXT NOT NULL,
+          provider VARCHAR(50) NOT NULL DEFAULT 'gemini',
+          api_key TEXT DEFAULT '',
+          base_url TEXT DEFAULT '',
+          model VARCHAR(100) DEFAULT '',
+          is_active BOOLEAN DEFAULT FALSE,
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (user_id, provider)
+        );
+      `);
+    }
+
+    // Migración para bases de datos existentes con esquema previo:
+    try {
+      await client.query(`
+        ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS provider VARCHAR(50) DEFAULT 'gemini';
+        ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS base_url TEXT DEFAULT '';
+        ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS model VARCHAR(100) DEFAULT '';
+        ALTER TABLE user_api_keys ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT FALSE;
+      `);
+
+      await client.query(`
+        DO $$ 
+        BEGIN
+          IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_api_keys_user_id_key') THEN
+            ALTER TABLE user_api_keys DROP CONSTRAINT user_api_keys_user_id_key;
+          END IF;
+          IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_api_keys_user_id_provider_key') THEN
+            ALTER TABLE user_api_keys ADD CONSTRAINT user_api_keys_user_id_provider_key UNIQUE (user_id, provider);
+          END IF;
+        END $$;
+      `);
+    } catch (migErr) {
+      console.warn("Nota de migración user_api_keys:", (migErr as Error).message);
     }
 
     await client.query(`
@@ -524,4 +602,234 @@ export async function query(text: string, params?: unknown[]) {
   return pool.query(text, params);
 }
 
-export default getPool;
+// ==========================================
+// AI Keys & Provider Operations
+// ==========================================
+
+export async function ensureUserApiKeysTable() {
+  const connectionString = getConnectionString();
+  if (!connectionString) return;
+  const pool = getPool();
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS user_api_keys (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        provider VARCHAR(50) NOT NULL DEFAULT 'gemini',
+        api_key TEXT DEFAULT '',
+        base_url TEXT DEFAULT '',
+        model VARCHAR(100) DEFAULT '',
+        is_active BOOLEAN DEFAULT FALSE,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      DO $$ 
+      BEGIN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_api_keys' AND column_name = 'provider') THEN
+          ALTER TABLE user_api_keys ADD COLUMN provider VARCHAR(50) DEFAULT 'gemini';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_api_keys' AND column_name = 'base_url') THEN
+          ALTER TABLE user_api_keys ADD COLUMN base_url TEXT DEFAULT '';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_api_keys' AND column_name = 'model') THEN
+          ALTER TABLE user_api_keys ADD COLUMN model VARCHAR(100) DEFAULT '';
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'user_api_keys' AND column_name = 'is_active') THEN
+          ALTER TABLE user_api_keys ADD COLUMN is_active BOOLEAN DEFAULT FALSE;
+        END IF;
+      END $$;
+    `);
+
+    await pool.query(`
+      DO $$
+      BEGIN
+        IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_api_keys_user_id_key') THEN
+          ALTER TABLE user_api_keys DROP CONSTRAINT user_api_keys_user_id_key;
+        END IF;
+      END $$;
+    `);
+
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_user_api_keys_user_provider 
+      ON user_api_keys (user_id, provider);
+    `);
+  } catch (err) {
+    console.error("Error ensuring user_api_keys schema:", err);
+  }
+}
+
+export async function getUserAiConfigs(userId: number | string): Promise<UserApiKeyRecord[]> {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await ensureUserApiKeysTable();
+    const pool = getPool();
+    try {
+      const res = await pool.query(
+        `SELECT id, user_id, provider, api_key, base_url, model, is_active, updated_at 
+         FROM user_api_keys 
+         WHERE user_id = $1::text 
+         ORDER BY updated_at DESC`,
+        [String(userId)]
+      );
+      return res.rows.map((r) => ({
+        id: r.id,
+        user_id: r.user_id,
+        provider: r.provider || "gemini",
+        api_key: r.api_key || "",
+        base_url: r.base_url || (r.provider === "ollama" ? "http://localhost:11434" : ""),
+        model: r.model || (r.provider === "ollama" ? "llama3" : "gemini-3.7-flash"),
+        is_active: Boolean(r.is_active),
+        updated_at: r.updated_at,
+      }));
+    } catch (err) {
+      console.error("Error querying user_api_keys:", err);
+    }
+  }
+
+  const userConfigs = (global.__mockUserApiKeys || []).filter(
+    (k) => String(k.user_id) === String(userId)
+  );
+  return userConfigs;
+}
+
+export async function saveUserAiConfig(
+  userId: number | string,
+  provider: string,
+  apiKey: string,
+  baseUrl = "",
+  model = "",
+  isActive = false
+): Promise<UserApiKeyRecord> {
+  const normUserId = String(userId);
+  const normProvider = provider.toLowerCase();
+  // Handle null values by converting to empty string
+  const safeApiKey = apiKey ?? "";
+  const safeBaseUrl = baseUrl ?? "";
+  const safeModel = model ?? "";
+  const defBaseUrl = normProvider === "ollama" ? (safeBaseUrl || "http://localhost:11434") : (safeBaseUrl || "");
+  const defModel = normProvider === "ollama" ? (safeModel || "llama3") : (safeModel || "gemini-3.7-flash");
+
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await ensureUserApiKeysTable();
+    const pool = getPool();
+    try {
+      if (isActive) {
+        await pool.query(
+          "UPDATE user_api_keys SET is_active = FALSE WHERE user_id = $1::text",
+          [normUserId]
+        );
+      }
+
+      const updateRes = await pool.query(
+        `UPDATE user_api_keys 
+         SET api_key = $1, base_url = $2, model = $3, is_active = $4, updated_at = CURRENT_TIMESTAMP 
+         WHERE user_id = $5::text AND provider = $6 
+         RETURNING id, user_id, provider, api_key, base_url, model, is_active, updated_at`,
+        [safeApiKey.trim(), defBaseUrl.trim(), defModel.trim(), isActive, normUserId, normProvider]
+      );
+
+      if (updateRes.rows.length > 0) {
+        const r = updateRes.rows[0];
+        return {
+          id: r.id,
+          user_id: r.user_id,
+          provider: r.provider,
+          api_key: r.api_key,
+          base_url: r.base_url,
+          model: r.model,
+          is_active: Boolean(r.is_active),
+          updated_at: r.updated_at,
+        };
+      }
+
+      const insertRes = await pool.query(
+        `INSERT INTO user_api_keys (user_id, provider, api_key, base_url, model, is_active, updated_at) 
+         VALUES ($1::text, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) 
+         RETURNING id, user_id, provider, api_key, base_url, model, is_active, updated_at`,
+        [normUserId, normProvider, safeApiKey.trim(), defBaseUrl.trim(), defModel.trim(), isActive]
+      );
+      const r = insertRes.rows[0];
+      return {
+        id: r.id,
+        user_id: r.user_id,
+        provider: r.provider,
+        api_key: r.api_key,
+        base_url: r.base_url,
+        model: r.model,
+        is_active: Boolean(r.is_active),
+        updated_at: r.updated_at,
+      };
+    } catch (err) {
+      console.error("Error saving in user_api_keys DB:", err);
+    }
+  }
+
+  if (!global.__mockUserApiKeys) global.__mockUserApiKeys = [];
+  if (isActive) {
+    global.__mockUserApiKeys.forEach((k) => {
+      if (String(k.user_id) === normUserId) k.is_active = false;
+    });
+  }
+
+  const existingIdx = global.__mockUserApiKeys.findIndex(
+    (k) => String(k.user_id) === normUserId && k.provider === normProvider
+  );
+
+  const record: UserApiKeyRecord = {
+    id: existingIdx >= 0 ? global.__mockUserApiKeys[existingIdx].id : global.__mockUserApiKeys.length + 1,
+    user_id: normUserId,
+    provider: normProvider,
+    api_key: apiKey.trim(),
+    base_url: defBaseUrl.trim(),
+    model: defModel.trim(),
+    is_active: isActive,
+    updated_at: new Date(),
+  };
+
+  if (existingIdx >= 0) {
+    global.__mockUserApiKeys[existingIdx] = record;
+  } else {
+    global.__mockUserApiKeys.push(record);
+  }
+
+  return record;
+}
+
+export async function setActiveAiProvider(
+  userId: number | string,
+  provider: string
+): Promise<boolean> {
+  const normUserId = String(userId);
+  const normProvider = provider.toLowerCase();
+
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await ensureUserApiKeysTable();
+    const pool = getPool();
+    try {
+      await pool.query(
+        `UPDATE user_api_keys 
+         SET is_active = (provider = $1), updated_at = CURRENT_TIMESTAMP 
+         WHERE user_id = $2::text`,
+        [normProvider, normUserId]
+      );
+      return true;
+    } catch (err) {
+      console.error("Error setting active AI provider in DB:", err);
+    }
+  }
+
+  if (global.__mockUserApiKeys) {
+    global.__mockUserApiKeys.forEach((k) => {
+      if (String(k.user_id) === normUserId) {
+        k.is_active = k.provider === normProvider;
+      }
+    });
+  }
+  return true;
+}
+
+export default getPool();

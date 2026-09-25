@@ -24,6 +24,11 @@ import {
   ArrowRight,
   Trophy,
   Zap,
+  Bot,
+  Sparkles,
+  Check,
+  Globe,
+  Radio,
 } from "lucide-react";
 import Navbar from "@/app/components/Navbar";
 import { useAuth } from "@/lib/AuthContext";
@@ -47,6 +52,16 @@ export default function AccountPage() {
   const [availableModules, setAvailableModules] = useState<Array<{id:number; slug:string; name:string; description:string}>>([]);
   const [selectedModuleSlugs, setSelectedModuleSlugs] = useState<string[]>([]);
   const [modulesSaving, setModulesSaving] = useState(false);
+
+  // AI Providers State (Gemini & Ollama)
+  const [activeTabAi, setActiveTabAi] = useState<"gemini" | "ollama">("gemini");
+  const [activeProvider, setActiveProvider] = useState<"gemini" | "ollama">("gemini");
+  const [geminiApiKey, setGeminiApiKey] = useState("");
+  const [geminiModel, setGeminiModel] = useState("gemini-3.7-flash");
+  const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
+  const [ollamaModel, setOllamaModel] = useState("llama3");
+  const [ollamaApiKey, setOllamaApiKey] = useState("");
+  const [aiSaving, setAiSaving] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
@@ -100,7 +115,36 @@ export default function AccountPage() {
       }
     };
 
+    const fetchAiKeys = async () => {
+      try {
+        const res = await fetch("/api/ai-keys");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.configs) {
+          const geminiConf = data.configs.find((c: any) => c.provider === "gemini");
+          if (geminiConf) {
+            setGeminiApiKey(geminiConf.apiKey || "");
+            if (geminiConf.model) setGeminiModel(geminiConf.model);
+          }
+
+          const ollamaConf = data.configs.find((c: any) => c.provider === "ollama");
+          if (ollamaConf) {
+            if (ollamaConf.baseUrl) setOllamaBaseUrl(ollamaConf.baseUrl);
+            if (ollamaConf.model) setOllamaModel(ollamaConf.model);
+            if (ollamaConf.apiKey) setOllamaApiKey(ollamaConf.apiKey);
+          }
+        }
+        if (data.activeProvider) {
+          setActiveProvider(data.activeProvider);
+          setActiveTabAi(data.activeProvider);
+        }
+      } catch {
+        console.error("Error fetching AI keys");
+      }
+    };
+
     fetchModules();
+    fetchAiKeys();
   }, [user]);
 
   const toggleModule = (slug: string) => {
@@ -133,6 +177,69 @@ export default function AccountPage() {
       setErrorMsg((error as Error).message || "Error al guardar los módulos.");
     } finally {
       setModulesSaving(false);
+    }
+  };
+
+  const saveAiConfig = async (provider: "gemini" | "ollama", setAsActive = true) => {
+    if (!user) return;
+    setAiSaving(true);
+    setErrorMsg("");
+    setSuccessMsg("");
+    try {
+      const payload = provider === "gemini"
+        ? {
+            provider: "gemini",
+            apiKey: geminiApiKey,
+            model: geminiModel,
+            isActive: setAsActive,
+          }
+        : {
+            provider: "ollama",
+            baseUrl: ollamaBaseUrl,
+            model: ollamaModel,
+            apiKey: ollamaApiKey,
+            isActive: setAsActive,
+          };
+
+      const res = await fetch("/api/ai-keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "No se pudo guardar la configuración.");
+      }
+
+      if (setAsActive) {
+        setActiveProvider(provider);
+      }
+
+      setSuccessMsg(`Configuración de ${provider === "gemini" ? "Google Gemini" : "Ollama"} guardada correctamente.`);
+      setTimeout(() => setSuccessMsg(""), 5000);
+    } catch (error) {
+      setErrorMsg((error as Error).message || "Error al guardar la configuración de IA.");
+    } finally {
+      setAiSaving(false);
+    }
+  };
+
+  const switchActiveProvider = async (newProvider: "gemini" | "ollama") => {
+    if (!user) return;
+    try {
+      const res = await fetch("/api/ai-keys", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activeProvider: newProvider }),
+      });
+      if (res.ok) {
+        setActiveProvider(newProvider);
+        setSuccessMsg(`Proveedor activo para el asistente: ${newProvider === "gemini" ? "Google Gemini" : "Ollama"}`);
+        setTimeout(() => setSuccessMsg(""), 4000);
+      }
+    } catch (e) {
+      console.error("Error switching active provider:", e);
     }
   };
 
@@ -269,7 +376,7 @@ export default function AccountPage() {
 
         <div className="mx-auto max-w-5xl px-6 py-10 space-y-8">
           {/* Account Level Progression Banner */}
-          <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-zinc-900 to-zinc-900 p-6 backdrop-blur-md shadow-xl">
+          <div className="rounded-2xl border border-amber-500/30 bg-linear-to-r from-amber-500/10 via-zinc-900 to-zinc-900 p-6 backdrop-blur-md shadow-xl">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 pb-4 border-b border-zinc-800">
               <div className="flex items-center gap-4">
                 <div className="text-4xl">{accountLevel.rankBadge}</div>
@@ -555,6 +662,211 @@ export default function AccountPage() {
               </div>
 
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Bot className="h-4 w-4 text-emerald-400" />
+                    Asistentes de IA (Gemini & Ollama)
+                  </h3>
+                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-300">
+                    Activo: {activeProvider === "gemini" ? "Gemini" : "Ollama"}
+                  </span>
+                </div>
+
+                {/* Tabs para seleccionar Gemini u Ollama */}
+                <div className="flex rounded-xl bg-zinc-950/80 p-1 border border-zinc-800 mb-4">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTabAi("gemini")}
+                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition ${
+                      activeTabAi === "gemini"
+                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-sm"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+                    <span>Google Gemini</span>
+                    {activeProvider === "gemini" && (
+                      <span className="ml-1 h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTabAi("ollama")}
+                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition ${
+                      activeTabAi === "ollama"
+                        ? "bg-sky-500/20 text-sky-300 border border-sky-500/30 shadow-sm"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    <Server className="h-3.5 w-3.5 text-sky-400" />
+                    <span>Ollama (Local / Remoto)</span>
+                    {activeProvider === "ollama" && (
+                      <span className="ml-1 h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Formulario de Google Gemini */}
+                {activeTabAi === "gemini" && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-zinc-400 flex items-center justify-between">
+                        <span>API Key de Google AI Studio</span>
+                        <a
+                          href="https://aistudio.google.com/app/apikey"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[10px] text-amber-400 hover:underline inline-flex items-center gap-1"
+                        >
+                          Obtener clave gratis
+                        </a>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showNewPassword ? "text" : "password"}
+                          value={geminiApiKey}
+                          onChange={(e) => setGeminiApiKey(e.target.value)}
+                          placeholder="AIzaSy..."
+                          className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 pl-4 pr-10 text-xs text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 transition font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-zinc-300"
+                        >
+                          {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-zinc-400">
+                        Modelo de Gemini
+                      </label>
+                      <select
+                        value={geminiModel}
+                        onChange={(e) => setGeminiModel(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2 px-3 text-xs text-white focus:border-amber-500 focus:outline-none transition font-mono"
+                      >
+                        <option value="gemini-3.7-flash">gemini-3.7-flash (Última generación - Razonamiento Híbrido)</option>
+                        <option value="gemini-2.5-flash">gemini-2.5-flash (Alta velocidad y precisión)</option>
+                        <option value="gemini-2.5-pro">gemini-2.5-pro (Razonamiento profundo)</option>
+                        <option value="gemini-2.0-flash">gemini-2.0-flash (Ultra rápido)</option>
+                        <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite (Ligero / Bajo consumo)</option>
+                        <option value="gemini-1.5-flash">gemini-1.5-flash (Estable)</option>
+                        <option value="gemini-1.5-pro">gemini-1.5-pro (Contexto extenso)</option>
+                      </select>
+                    </div>
+
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => saveAiConfig("gemini", true)}
+                        disabled={aiSaving}
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 py-2 text-xs font-bold text-zinc-950 transition hover:bg-amber-400 disabled:opacity-50 cursor-pointer shadow-md shadow-amber-500/10"
+                      >
+                        {aiSaving ? "Guardando..." : "Guardar y Activar Gemini"}
+                      </button>
+                      {activeProvider !== "gemini" && (
+                        <button
+                          type="button"
+                          onClick={() => switchActiveProvider("gemini")}
+                          className="px-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs font-semibold hover:bg-amber-500/20 transition cursor-pointer"
+                          title="Usar como proveedor activo"
+                        >
+                          Activar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Formulario de Ollama */}
+                {activeTabAi === "ollama" && (
+                  <div className="space-y-4 animate-fadeIn">
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-zinc-400">
+                        URL Base de Ollama
+                      </label>
+                      <input
+                        type="text"
+                        value={ollamaBaseUrl}
+                        onChange={(e) => setOllamaBaseUrl(e.target.value)}
+                        placeholder="http://localhost:11434"
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 px-4 text-xs text-white placeholder-zinc-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 transition font-mono"
+                      />
+                      <p className="text-[10px] text-zinc-500">
+                        Por defecto es <code>http://localhost:11434</code> para Ollama local.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-zinc-400">
+                        Modelo de Ollama
+                      </label>
+                      <input
+                        type="text"
+                        value={ollamaModel}
+                        onChange={(e) => setOllamaModel(e.target.value)}
+                        placeholder="llama3, mistral, deepseek-r1..."
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2 px-3 text-xs text-white focus:border-sky-500 focus:outline-none transition font-mono"
+                      />
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {["llama3", "llama3.2", "deepseek-r1", "mistral", "qwen2.5"].map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setOllamaModel(m)}
+                            className={`px-2 py-0.5 rounded-md text-[10px] font-mono transition border ${
+                              ollamaModel === m
+                                ? "border-sky-400 bg-sky-500/20 text-sky-200"
+                                : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:text-zinc-200"
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-[11px] font-medium text-zinc-400">
+                        API Key / Bearer Token (Opcional)
+                      </label>
+                      <input
+                        type="password"
+                        value={ollamaApiKey}
+                        onChange={(e) => setOllamaApiKey(e.target.value)}
+                        placeholder="Opcional si Ollama está protegido por token"
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2 px-3 text-xs text-white focus:border-sky-500 focus:outline-none transition font-mono"
+                      />
+                    </div>
+
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => saveAiConfig("ollama", true)}
+                        disabled={aiSaving}
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-sky-500 py-2 text-xs font-bold text-zinc-950 transition hover:bg-sky-400 disabled:opacity-50 cursor-pointer shadow-md shadow-sky-500/10"
+                      >
+                        {aiSaving ? "Guardando..." : "Guardar y Activar Ollama"}
+                      </button>
+                      {activeProvider !== "ollama" && (
+                        <button
+                          type="button"
+                          onClick={() => switchActiveProvider("ollama")}
+                          className="px-3 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-200 text-xs font-semibold hover:bg-sky-500/20 transition cursor-pointer"
+                          title="Usar como proveedor activo"
+                        >
+                          Activar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md">
                 <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
                   <Award className="h-4 w-4 text-emerald-400" />
                   Progreso en Terminales
@@ -615,8 +927,11 @@ export default function AccountPage() {
                 </div>
               </div>
 
-              {/* Quick Practicing CTA */}
-              <div className="rounded-2xl border border-blue-900/30 bg-blue-950/20 p-6">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md">
+                <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                  <Award className="h-4 w-4 text-emerald-400" />
+                  Quick Practicing CTA
+                </h3>
                 <div className="flex items-center gap-2 text-blue-400 font-bold text-sm mb-2">
                   <Code2 className="h-5 w-5" />
                   <span>¡Nuevo módulo disponible!</span>

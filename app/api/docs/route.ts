@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getPool } from "@/lib/db";
+import { getSession } from "@/lib/auth";
 
 export interface LiveDocResponse {
   source: string;
@@ -110,17 +112,18 @@ const normalizeSearchResultUrl = (href: string) => {
 
 const cleanScrapedContent = (text: string) => {
   return text
-    .replace(/^Title:\s*.*$/m, "")
-    .replace(/^URL Source:\s*.*$/m, "")
-    .replace(/^Markdown Content:\s*/m, "")
+    .replace(/^(Title|URL Source|Published Time|Author|Date|Markdown Content):\s*.*$/gim, "")
+    .replace(/Skip to (main )?content/gi, "")
+    .replace(/Select a display theme[\s\S]*?theme/gi, "")
     .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
     .replace(/\[([^\]]+)\]\((https?:\/\/|\/)[^)]*\)/g, "$1")
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1")
     .replace(/\[(.*?)\]\((.*?)\)/g, "$1")
     .replace(/[#>*_`~\-]/g, " ")
+    .replace(/\r\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
-    .replace(/\s+\n/g, "\n")
-    .replace(/\n\s+/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
     .trim();
 };
 
@@ -128,9 +131,11 @@ const isNavigationLikeText = (text: string) => {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) return true;
   if (normalized.includes("http://") || normalized.includes("https://")) return true;
-  if (normalized.length < 80) return true;
+  if (normalized.length < 60) return true;
 
   const blockedPatterns = [
+    /^Published Time:/i,
+    /^Skip to (main )?content/i,
     /^Search/i,
     /^Latest$/i,
     /^Frameworks$/i,
@@ -144,10 +149,12 @@ const isNavigationLikeText = (text: string) => {
     /^Deploy$/i,
     /^GitHub$/i,
     /^Vercel OSS$/i,
-    /^Skip to content$/i,
     /^Select a display theme/i,
     /^Ask AI$/i,
     /^The framework for building agents$/i,
+    /^TypeScript Download Docs/i,
+    /^Table of contents/i,
+    /^On this page/i,
   ];
 
   return blockedPatterns.some((pattern) => pattern.test(normalized));
@@ -168,30 +175,46 @@ const extractRelevantScrapedSection = (rawText: string, queryTerms: string) => {
     .filter((p) => !isNavigationLikeText(p));
 
   const lowerQuery = queryTerms.toLowerCase();
+  const tokens = lowerQuery.split(/\s+/).filter(Boolean);
+
   const relevant = paragraphs.filter((p) => {
     const lower = p.toLowerCase();
-    return lowerQuery.split(/\s+/).filter(Boolean).every((token) => lower.includes(token));
+    return tokens.some((token) => lower.includes(token));
   });
 
-  const selected = relevant.length > 0 ? relevant.slice(0, 3) : paragraphs.slice(0, 3);
+  const selected = relevant.length > 0 ? [relevant[0]] : paragraphs.slice(0, 1);
   const uniqueSelected = [...new Map(selected.map((p) => [p.toLowerCase().slice(0, 180), p])).values()];
   const finalSelection = uniqueSelected
-    .filter((p) => p.length > 80 && !isNavigationLikeText(p))
-    .slice(0, 2);
+    .filter((p) => p.length > 60 && !isNavigationLikeText(p))
+    .slice(0, 1);
 
   return compactSummary(finalSelection.join("\n\n"));
 };
 
-const searchWebForCommand = async (moduleParam: string, query: string, apiKey?: string) => {
+const searchWebForCommand = async (moduleParam: string, query: string, apiKey?: string, userId?: number | string) => {
+  let finalApiKey = apiKey?.trim();
+
+  if (!finalApiKey && userId) {
+    try {
+      const pool = getPool();
+      const result = await pool.query("SELECT api_key FROM user_api_keys WHERE user_id = $1", [userId]);
+      if (result.rows.length > 0) {
+        finalApiKey = result.rows[0].api_key;
+      }
+    } catch (e) {
+      console.error("Error fetching API key from DB in searchWebForCommand:", e);
+    }
+  }
+
   const moduleKey = moduleParam in OFFICIAL_DOCS_BY_MODULE ? moduleParam : "ssh";
   const officialDocs = OFFICIAL_DOCS_BY_MODULE[moduleKey];
   const queryTerms = (query || "documentation").trim();
 
-  if (apiKey?.trim()) {
+  if (finalApiKey?.trim()) {
     try {
       const prompt = `Busca contenido documental oficial y relevante sobre "${queryTerms}" para ${moduleKey}. Devuelve SOLO JSON válido con esta estructura: {"results":[{"title":"...","summary":"..."}]} y máximo 3 resultados. Debe ser contenido documental, no enlaces ni anuncios. No agregues texto extra.`;
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(apiKey.trim())}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(finalApiKey.trim())}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -314,73 +337,82 @@ const buildDocsFromOfficialSource = (moduleParam: string, html: string): DocBund
 
   const commandTemplates: Record<string, { name: string; syntax: string; description: string }[]> = {
     ssh: [
-      { name: "ssh", syntax: "ssh [options] [user@]hostname [command]", description: "Conexión segura a un host remoto." },
-      { name: "ssh-keygen", syntax: "ssh-keygen [-t type] [-b bits] [-C comment]", description: "Genera y gestiona claves SSH." },
-      { name: "ssh-copy-id", syntax: "ssh-copy-id [-i identity_file] [user@]machine", description: "Instala la clave pública en el servidor remoto." },
-      { name: "scp", syntax: "scp [options] source destination", description: "Copia archivos entre sistemas de forma segura." },
-      { name: "rsync", syntax: "rsync -avz carpeta/ usuario@servidor:/ruta/", description: "Sincroniza directorios de forma eficiente entre hosts." },
-      { name: "ssh-agent", syntax: "eval \"$(ssh-agent -s)\"", description: "Inicia el agente SSH para gestionar claves en memoria." },
-      { name: "ssh-add", syntax: "ssh-add ~/.ssh/id_ed25519", description: "Carga una clave privada para autenticación automática." },
-      { name: "ssh -L", syntax: "ssh -L 8080:localhost:3000 usuario@servidor", description: "Crea un túnel local hacia un servicio remoto." },
-      { name: "ssh -R", syntax: "ssh -R 8080:localhost:3000 usuario@servidor", description: "Exponer un puerto local a través de la conexión remota." },
-      { name: "ssh -D", syntax: "ssh -D 8080 usuario@servidor", description: "Configura un proxy SOCKS para traficar conexiones." },
-      { name: "ProxyJump", syntax: "ssh -J bastion host", description: "Conexión a través de un nodo intermedio." },
+      { name: "ssh", syntax: "ssh [options] [user@]hostname [command]", description: "Abre una sesión de terminal cifrada o ejecuta comandos remotos de forma segura." },
+      { name: "ssh-keygen", syntax: "ssh-keygen -t ed25519 -C \"usuario@dominio.com\"", description: "Genera y gestiona pares de claves criptográficas SSH seguras." },
+      { name: "ssh-copy-id", syntax: "ssh-copy-id -i ~/.ssh/id_ed25519.pub user@servidor", description: "Instala la clave pública en el archivo authorized_keys del servidor remoto." },
+      { name: "scp", syntax: "scp -r ./carpeta usuario@servidor:/var/www/", description: "Copia archivos y directorios entre sistemas de forma segura mediante SSH." },
+      { name: "rsync", syntax: "rsync -avzP ./archivos/ usuario@servidor:/destino/", description: "Sincroniza directorios y archivos de forma incremental y eficiente." },
+      { name: "ssh-agent", syntax: "eval \"$(ssh-agent -s)\"", description: "Inicia el agente SSH para gestionar claves privadas en memoria." },
+      { name: "ssh-add", syntax: "ssh-add ~/.ssh/id_ed25519", description: "Carga una clave privada en el agente para autenticación sin pedir contraseña." },
+      { name: "ssh -L (Local Forwarding)", syntax: "ssh -L 8080:localhost:3000 usuario@servidor", description: "Crea un túnel local hacia un servicio o puerto remoto interno." },
+      { name: "ssh -R (Remote Forwarding)", syntax: "ssh -R 8080:localhost:3000 usuario@servidor", description: "Expone un puerto local a través de la conexión en el servidor remoto." },
+      { name: "ssh -D (SOCKS Proxy)", syntax: "ssh -D 1080 usuario@servidor", description: "Configura un proxy SOCKS dinámico para enrutar tráfico mediante el host remoto." },
+      { name: "ProxyJump (-J)", syntax: "ssh -J usuario@bastion:22 usuario@servidor-privado", description: "Conexión a través de un host intermedio o servidor bastión." },
+      { name: "~/.ssh/config", syntax: "Host prod\n  HostName 192.168.1.50\n  User ubuntu\n  IdentityFile ~/.ssh/id_ed25519", description: "Define alias y parámetros preconfigurados para conexiones frecuentes." },
+      { name: "ssh-keyscan", syntax: "ssh-keyscan -H servidor.com >> ~/.ssh/known_hosts", description: "Obtiene y almacena las claves públicas del host remoto para validación." },
     ],
     docker: [
-      { name: "docker run", syntax: "docker run [OPTIONS] IMAGE [COMMAND]", description: "Creación e inicio de un contenedor." },
-      { name: "docker build", syntax: "docker build [OPTIONS] PATH | URL", description: "Construcción de una imagen desde un Dockerfile." },
-      { name: "docker compose", syntax: "docker compose [OPTIONS] COMMAND", description: "Definición de servicios multicontenedor." },
-      { name: "docker exec", syntax: "docker exec [OPTIONS] CONTAINER COMMAND", description: "Ejecución de comandos dentro de un contenedor activo." },
-      { name: "docker volume", syntax: "docker volume create NAME", description: "Persistencia de datos fuera del contenedor." },
-      { name: "docker network", syntax: "docker network create mi-red", description: "Crea una red virtual para conectar contenedores." },
-      { name: "docker ps", syntax: "docker ps -a", description: "Lista todos los contenedores, activos y detenidos." },
-      { name: "docker logs", syntax: "docker logs -f mi-app", description: "Muestra y sigue los logs de un contenedor." },
-      { name: "docker image prune", syntax: "docker image prune -a", description: "Elimina imágenes no utilizadas para limpiar el sistema." },
-      { name: "docker compose up", syntax: "docker compose up -d", description: "Inicia servicios definidos en un archivo compose." },
-      { name: "docker compose down", syntax: "docker compose down", description: "Detiene y elimina contenedores definidos por compose." },
-      { name: "docker stats", syntax: "docker stats", description: "Muestra consumo de recursos de los contenedores." },
+      { name: "docker run", syntax: "docker run -d -p 8080:80 --name mi-app nginx:alpine", description: "Crea e inicia un nuevo contenedor a partir de una imagen." },
+      { name: "docker build", syntax: "docker build -t mi-app:1.0 -f Dockerfile .", description: "Construye una imagen personalizada desde las instrucciones de un Dockerfile." },
+      { name: "docker compose up", syntax: "docker compose -f docker-compose.yml up -d", description: "Levanta y orquesta todos los servicios definidos en el archivo compose." },
+      { name: "docker compose down", syntax: "docker compose down -v", description: "Detiene y elimina contenedores, redes y opcionalmente volúmenes." },
+      { name: "docker ps", syntax: "docker ps -a --format \"table {{.ID}}\t{{.Names}}\t{{.Status}}\"", description: "Lista todos los contenedores existentes (en ejecución y detenidos)." },
+      { name: "docker exec", syntax: "docker exec -it mi-contenedor /bin/sh", description: "Ejecuta comandos interactivos o scripts dentro de un contenedor en ejecución." },
+      { name: "docker logs", syntax: "docker logs -f --tail 100 mi-contenedor", description: "Muestra y sigue en tiempo real los registros/logs emitidos por el contenedor." },
+      { name: "docker volume", syntax: "docker volume create datos_app", description: "Crea y administra volúmenes persistentes independientes del ciclo de vida del contenedor." },
+      { name: "docker network", syntax: "docker network create --driver bridge red_interna", description: "Crea redes virtuales aisladas para comunicación entre contenedores." },
+      { name: "docker stop / start", syntax: "docker stop mi-contenedor && docker start mi-contenedor", description: "Detiene o reanuda la ejecución de contenedores existentes." },
+      { name: "docker system prune", syntax: "docker system prune -a --volumes", description: "Limpia recursos no utilizados (imágenes huérfanas, contenedores detenidos, redes)." },
+      { name: "docker stats", syntax: "docker stats --no-stream", description: "Muestra el consumo de CPU, memoria, red y disco de los contenedores activos." },
+      { name: "docker inspect", syntax: "docker inspect mi-contenedor", description: "Obtiene información detallada de bajo nivel en JSON sobre un contenedor o imagen." },
+      { name: "Dockerfile Instructions", syntax: "FROM node:20-alpine\nWORKDIR /app\nCOPY . .\nRUN npm install\nCMD [\"npm\", \"start\"]", description: "Sintaxis estándar para describir la construcción de una imagen de Docker." },
     ],
     postgres: [
-      { name: "psql", syntax: "psql -h localhost -U postgres -d mi_base", description: "Cliente interactivo para conectarse a PostgreSQL." },
-      { name: "SELECT", syntax: "SELECT ... FROM table WHERE ... ORDER BY ... LIMIT ...;", description: "Consulta de filas con filtrado, orden y límite." },
-      { name: "INSERT", syntax: "INSERT INTO table (...) VALUES (...);", description: "Inserción de registros en una tabla." },
-      { name: "UPDATE", syntax: "UPDATE usuarios SET edad = 26 WHERE id = 1;", description: "Actualiza registros específicos en una tabla." },
-      { name: "DELETE", syntax: "DELETE FROM usuarios WHERE id = 1;", description: "Elimina registros de acuerdo con una condición." },
-      { name: "CREATE TABLE", syntax: "CREATE TABLE usuarios (id SERIAL PRIMARY KEY, nombre VARCHAR(100));", description: "Define una nueva tabla con columnas y tipos de dato." },
-      { name: "ALTER TABLE", syntax: "ALTER TABLE usuarios ADD COLUMN telefono VARCHAR(20);", description: "Modifica la estructura de una tabla existente." },
-      { name: "DROP TABLE", syntax: "DROP TABLE IF EXISTS usuarios;", description: "Elimina una tabla y su contenido de manera segura." },
-      { name: "CREATE INDEX", syntax: "CREATE INDEX idx_usuarios_email ON usuarios(email);", description: "Optimización de consultas mediante índices." },
-      { name: "BEGIN / COMMIT", syntax: "BEGIN; ... COMMIT;", description: "Bloque transaccional con aislamiento ACID." },
-      { name: "ROLLBACK", syntax: "ROLLBACK;", description: "Deshace cambios pendientes en una transacción." },
-      { name: "CREATE DATABASE", syntax: "CREATE DATABASE mi_base;", description: "Genera una nueva base de datos." },
-      { name: "CREATE USER", syntax: "CREATE USER david WITH PASSWORD '123456';", description: "Crea un usuario o rol con acceso a PostgreSQL." },
-      { name: "GRANT", syntax: "GRANT ALL PRIVILEGES ON DATABASE mi_base TO david;", description: "Otorga permisos sobre una base de datos." },
-      { name: "pg_dump", syntax: "pg_dump -U postgres mi_base > backup.sql", description: "Genera un backup de una base PostgreSQL." },
-      { name: "pg_restore", syntax: "pg_restore -U postgres -d mi_base backup.dump", description: "Restaura una base desde un archivo de backup." },
-      { name: "JSONB", syntax: "data JSONB", description: "Tipo de documento JSONB para almacenamiento flexible." },
+      { name: "psql", syntax: "psql -h localhost -U postgres -d mi_base", description: "Cliente interactivo de consola para conectarse y administrar PostgreSQL." },
+      { name: "SELECT", syntax: "SELECT id, nombre, email FROM usuarios WHERE activo = true ORDER BY id DESC LIMIT 10;", description: "Consulta filas de tablas con condiciones de filtrado, orden y límite." },
+      { name: "INSERT INTO", syntax: "INSERT INTO usuarios (nombre, email) VALUES ('Ada', 'ada@ejemplo.com') RETURNING id;", description: "Inserta registros en una tabla y puede retornar los valores generados." },
+      { name: "UPDATE", syntax: "UPDATE usuarios SET activo = false WHERE id = 5;", description: "Modifica registros existentes que cumplen una condición." },
+      { name: "DELETE", syntax: "DELETE FROM sesiones WHERE expira_en < NOW();", description: "Elimina registros de acuerdo con una condición específica." },
+      { name: "CREATE TABLE", syntax: "CREATE TABLE usuarios (id BIGSERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, creado_en TIMESTAMPTZ DEFAULT NOW());", description: "Define una nueva tabla con tipos de datos, llaves primarias y restricciones." },
+      { name: "ALTER TABLE", syntax: "ALTER TABLE usuarios ADD COLUMN telefono VARCHAR(20);", description: "Modifica la estructura de una tabla existente (añadir/eliminar columnas)." },
+      { name: "CREATE INDEX", syntax: "CREATE INDEX idx_usuarios_email ON usuarios(email);", description: "Crea un índice B-Tree para optimizar búsquedas y consultas frecuentes." },
+      { name: "Indexación JSONB (GIN)", syntax: "CREATE INDEX idx_meta_gin ON usuarios USING GIN (metadata);", description: "Permite indexar y buscar dentro de documentos JSONB con operadores `@>`, `?`." },
+      { name: "JOIN (INNER / LEFT)", syntax: "SELECT u.nombre, p.total FROM usuarios u LEFT JOIN pedidos p ON u.id = p.usuario_id;", description: "Combina filas de dos o más tablas basándose en claves foráneas o relaciones." },
+      { name: "Transacciones ACID", syntax: "BEGIN;\n  UPDATE cuentas SET saldo = saldo - 100 WHERE id = 1;\n  UPDATE cuentas SET saldo = saldo + 100 WHERE id = 2;\nCOMMIT;", description: "Bloque de operaciones atómicas con garantías de consistencia o ROLLBACK ante fallos." },
+      { name: "CTE (WITH ... AS)", syntax: "WITH activos AS (SELECT * FROM usuarios WHERE activo = true)\nSELECT count(*) FROM activos;", description: "Define subconsultas temporales y legibles dentro de una consulta principal." },
+      { name: "Window Functions", syntax: "SELECT nombre, salario, RANK() OVER (ORDER BY salario DESC) as ranking FROM empleados;", description: "Calcula métricas y ordenamientos sobre particiones de datos sin agrupar filas." },
+      { name: "EXPLAIN ANALYZE", syntax: "EXPLAIN ANALYZE SELECT * FROM pedidos WHERE fecha >= '2026-01-01';", description: "Muestra el plan de ejecución real del motor con tiempos exactos de CPU e I/O." },
+      { name: "pg_dump / pg_restore", syntax: "pg_dump -U postgres mi_base > backup.sql", description: "Genera copias de seguridad de bases de datos o restaura a partir de backups." },
     ],
     typescript: [
-      { name: "Tipos primitivos", syntax: "string | number | boolean | null | undefined", description: "Los tipos básicos permiten describir valores, estados y flujo de datos con seguridad." },
-      { name: "Interfaces", syntax: "interface User { id: number; name: string }", description: "Las interfaces modelan contratos de objeto y mejoran la claridad del dominio." },
-      { name: "Narrowing", syntax: "if (typeof value === 'string') { ... }", description: "El narrowing reduce tipos en tiempo de compilación y evita errores de runtime." },
-      { name: "Utility Types", syntax: "Partial<T> | Pick<T, K> | Omit<T, K>", description: "Los utility types transforman otros tipos sin duplicar definiciones." },
-      { name: "Generics", syntax: "function identity<T>(value: T): T", description: "Los genéricos permiten reutilizar lógica para distintos tipos sin perder seguridad." },
-      { name: "Strict mode", syntax: '"strict": true', description: "Activar strict mode ayuda a detectar null, any implícito y errores de tipos antes de desplegar." },
+      { name: "Tipos Primitivos & Arrays", syntax: "let nombre: string = \"Ada\"; let items: number[] = [1, 2, 3];", description: "Tipos fundamentales para describir datos escalares y colecciones con tipado seguro." },
+      { name: "Interfaces", syntax: "interface User {\n  id: number;\n  name: string;\n  email?: string;\n  readonly createdAt: Date;\n}", description: "Define contratos estructurales de objetos claros, extensibles y reutilizables." },
+      { name: "Type Aliases & Union", syntax: "type ID = string | number;\ntype Status = \"idle\" | \"loading\" | \"success\" | \"error\";", description: "Declara alias para tipos primitivos, uniones literales y combinaciones complejas." },
+      { name: "Generics (Genéricos)", syntax: "function wrap<T>(value: T): { data: T } {\n  return { data: value };\n}", description: "Permite crear funciones, interfaces y clases reutilizables con cualquier tipo seguro." },
+      { name: "Utility Types: Partial & Required", syntax: "type UpdateUser = Partial<User>;\ntype StrictUser = Required<User>;", description: "Vuelve todas las propiedades de un tipo opcionales o requeridas respectivamente." },
+      { name: "Utility Types: Pick & Omit", syntax: "type UserPreview = Pick<User, \"id\" | \"name\">;\ntype PublicUser = Omit<User, \"email\">;", description: "Construye tipos seleccionando o excluyendo propiedades específicas de otro tipo." },
+      { name: "Utility Types: Record", syntax: "type RoleConfig = Record<\"admin\" | \"user\", string[]>;", description: "Construye un tipo de objeto cuyas propiedades son claves de un tipo y valores de otro." },
+      { name: "Narrowing & Type Guards", syntax: "if (typeof val === \"string\") {\n  console.log(val.toUpperCase());\n}", description: "Reduce el rango de tipos en tiempo de ejecución mediante comprobaciones condicionales." },
+      { name: "Satisfies Operator", syntax: "const theme = { color: \"emerald\", dark: true } satisfies ThemeConfig;", description: "Valida que una variable cumple un tipo sin ensanchar la inferencia exacta de sus propiedades." },
+      { name: "Keyof & Typeof", syntax: "type UserKey = keyof User;\ntype State = typeof initialState;", description: "Extrae las propiedades de un tipo o infiere el tipo exacto a partir de una variable JS." },
+      { name: "Strict Mode & TSConfig", syntax: "{\n  \"compilerOptions\": {\n    \"strict\": true,\n    \"noImplicitAny\": true\n  }\n}", description: "Activa el modo estricto para evitar nullish runtime errors y variables sin tipo." },
     ],
     nextjs: [
-      { name: "App Router", syntax: "app/layout.tsx + app/page.tsx", description: "El App Router organiza rutas y layouts mediante el sistema de carpetas de Next.js." },
-      { name: "Server Components", syntax: "export default async function Page()", description: "Los componentes del servidor renderizan contenido seguro y eficiente sin depender del cliente." },
-      { name: "Client Components", syntax: "'use client'", description: "Cuando necesitas estado o eventos del navegador, se marca el componente como cliente." },
-      { name: "Metadata", syntax: "export const metadata = { title: 'Dashboard' }", description: "Los metadatos entregan títulos, descripciones y SEO ligero a cada página." },
-      { name: "Route Handlers", syntax: "app/api/hello/route.ts", description: "Los route handlers crean endpoints REST y lógica backend dentro del mismo proyecto." },
-      { name: "Rendering", syntax: "SSR / SSG / CSR", description: "Next.js combina renderizado del servidor, estático y cliente según el caso de uso de la app." },
+      { name: "App Router Structure", syntax: "app/layout.tsx + app/page.tsx + app/loading.tsx", description: "Organización de rutas y layouts mediante el sistema de carpetas de Next.js." },
+      { name: "Server Components (RSC)", syntax: "export default async function Page() {\n  const data = await getData();\n  return <div>{data.title}</div>;\n}", description: "Componentes renderizados en el servidor por defecto para máxima velocidad y seguridad." },
+      { name: "Client Components", syntax: "'use client';\nimport { useState } from 'react';", description: "Directiva para habilitar estado de React, hooks del navegador y eventos interactivos." },
+      { name: "Server Actions", syntax: "'use server';\nexport async function updateProfile(formData: FormData) {\n  await db.update(...);\n}", description: "Funciones asíncronas seguras que mutan datos en el servidor sin crear endpoints manuales." },
+      { name: "Route Handlers", syntax: "export async function GET(req: NextRequest) {\n  return NextResponse.json({ ok: true });\n}", description: "Define endpoints HTTP (GET, POST, PUT, DELETE) en rutas como `app/api/.../route.ts`." },
+      { name: "Dynamic Routes & Params", syntax: "// app/posts/[slug]/page.tsx\nexport default async function Post({ params }: { params: Promise<{ slug: string }> })", description: "Genera páginas dinámicas que capturan variables en la URL." },
+      { name: "Layouts & Templates", syntax: "export default function Layout({ children }: { children: React.ReactNode }) {\n  return <main>{children}</main>;\n}", description: "Estructuras de UI compartidas entre múltiples rutas preservando el estado." },
+      { name: "Metadata API & SEO", syntax: "export const metadata = {\n  title: 'Documentación',\n  description: 'Guías y referencias',\n};", description: "Configuración de metadatos estáticos o dinámicos para indexación y SEO." },
+      { name: "next/link & Navigation", syntax: "import Link from 'next/link';\n<Link href=\"/docs\">Documentación</Link>", description: "Navegación del lado del cliente ultra fluida con prefetching inteligente de rutas." },
+      { name: "Middleware", syntax: "export function middleware(req: NextRequest) {\n  // Auth y redirecciones\n}", description: "Intercepción y procesamiento de peticiones antes de que se complete el renderizado." },
+      { name: "Revalidation (ISR)", syntax: "revalidatePath('/docs');\nrevalidateTag('productos');", description: "Invalida la caché de páginas o datos bajo demanda sin reconstruir la app." },
     ],
   };
 
-  const officialCommands = (commandTemplates[normalizedModule] || commandTemplates.ssh).filter((cmd) => {
-    const haystack = `${cmd.name} ${cmd.description} ${cmd.syntax}`.toLowerCase();
-    return haystack.includes(normalizedModule) || normalized.includes(cmd.name.toLowerCase().split(" ")[0]) || normalized.includes(cmd.description.toLowerCase().split(" ")[0]);
-  });
+  const officialCommands = commandTemplates[normalizedModule] || commandTemplates.ssh;
 
   const defaultTopics: { title: string; body: string; codeSample?: string }[] = [
     {
@@ -587,8 +619,11 @@ export async function GET(req: NextRequest) {
     },
   };
 
+  const session = await getSession();
+  const userId = session?.userId;
+
   if (searchQuery) {
-    webResults = await searchWebForCommand(moduleParam, searchQuery, apiKey || undefined);
+    webResults = await searchWebForCommand(moduleParam, searchQuery, apiKey || undefined, userId);
   }
 
   const fallbackKey = (moduleParam === "docker" || moduleParam === "postgres" || moduleParam === "typescript" || moduleParam === "nextjs" || moduleParam === "ssh")

@@ -40,11 +40,9 @@ export default function DocsPage() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
-  const [geminiApiKey, setGeminiApiKey] = useState("");
 
   useEffect(() => {
-    const savedKey = window.localStorage.getItem("gemini-api-key") || "";
-    setGeminiApiKey(savedKey);
+    // Removed Gemini API key loading from localStorage
   }, []);
 
   const fetchDocs = useCallback(async (moduleName: DocSection, query = "", apiKey = "") => {
@@ -66,8 +64,8 @@ export default function DocsPage() {
   }, []);
 
   useEffect(() => {
-    fetchDocs(activeTab, searchQuery, geminiApiKey);
-  }, [activeTab, searchQuery, geminiApiKey, fetchDocs]);
+    fetchDocs(activeTab, searchQuery);
+  }, [activeTab, searchQuery, fetchDocs]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -82,25 +80,31 @@ export default function DocsPage() {
   const isConceptualModule = activeTab === "typescript" || activeTab === "nextjs";
 
   const filteredCommands = docData?.content.officialCommands.filter(
-    (c) =>
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.syntax.toLowerCase().includes(searchQuery.toLowerCase())
+    (c) => {
+      const query = searchQuery.toLowerCase().trim();
+      if (!query) return true;
+      const tokens = query.split(/\s+/).filter(Boolean);
+      return tokens.every(token => 
+        c.name.toLowerCase().includes(token) || 
+        c.description.toLowerCase().includes(token) || 
+        c.syntax.toLowerCase().includes(token)
+      );
+    }
   );
 
   const hasLocalResults = (filteredCommands?.length ?? 0) > 0;
   const hasExternalResults = (docData?.webResults?.length ?? 0) > 0;
 
-  const saveGeminiKey = () => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem("gemini-api-key", geminiApiKey.trim());
-    fetchDocs(activeTab, searchQuery, geminiApiKey.trim());
-  };
-
   const filteredTopics = docData?.content.topics.filter(
-    (t) =>
-      t.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.body.toLowerCase().includes(searchQuery.toLowerCase())
+    (t) => {
+      const query = searchQuery.toLowerCase().trim();
+      if (!query) return true;
+      const tokens = query.split(/\s+/).filter(Boolean);
+      return tokens.every(token => 
+        t.title.toLowerCase().includes(token) || 
+        t.body.toLowerCase().includes(token)
+      );
+    }
   );
 
   return (
@@ -109,7 +113,7 @@ export default function DocsPage() {
 
       <main className="flex-1 pb-16">
         {/* Header Hero */}
-        <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.08),transparent_40%),linear-gradient(180deg,#0b1117_0%,#050a0f_100%)]">
+        <section className="border-b border-white/10 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.08),transparent_40%),linear-gradient(180deg,#0b1117_0%,#050a0f_100%)]">
           <div className="mx-auto max-w-7xl px-4 sm:px-6 py-12">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-300/90">
@@ -163,7 +167,7 @@ export default function DocsPage() {
                     className={`flex items-center gap-2.5 rounded-full px-4 py-2.5 text-xs sm:text-sm font-semibold transition-all cursor-pointer ${
                       isSelected
                         ? "border border-emerald-400/40 bg-emerald-400/10 text-emerald-100 shadow-[0_0_0_1px_rgba(52,211,153,0.3)]"
-                        : "border border-white/10 bg-white/[0.03] text-zinc-300 hover:border-white/20 hover:text-white"
+                        : "border border-white/10 bg-white/3 text-zinc-300 hover:border-white/20 hover:text-white"
                     }`}
                   >
                     <TabIcon className="h-4 w-4" />
@@ -190,23 +194,6 @@ export default function DocsPage() {
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-full border border-white/10 bg-white/[0.03] py-2.5 pl-10 pr-4 text-xs sm:text-sm text-white placeholder-zinc-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-emerald-400/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition"
               />
-            </div>
-
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <input
-                type="password"
-                value={geminiApiKey}
-                onChange={(e) => setGeminiApiKey(e.target.value)}
-                placeholder="Gemini API key (opcional)"
-                className="w-full rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-emerald-400/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition sm:w-56"
-              />
-              <button
-                type="button"
-                onClick={saveGeminiKey}
-                className="rounded-full border border-emerald-500/30 bg-emerald-500/8 px-3 py-2 text-[11px] font-semibold text-emerald-200 transition hover:bg-emerald-500/15"
-              >
-                Conectar
-              </button>
             </div>
           </div>
 
@@ -287,8 +274,10 @@ export default function DocsPage() {
                     <Layers className="h-5 w-5 text-emerald-400" />
                     <h3>{isConceptualModule ? "Conceptos clave y referencias oficiales" : "Comandos Oficiales & Sintaxis"}</h3>
                   </div>
-                  <span className="text-xs text-zinc-500">
-                    {filteredCommands?.length || 0} referencias listadas
+                  <span className="text-xs text-zinc-400">
+                    {searchQuery.trim()
+                      ? `${(filteredCommands?.length || 0) + (docData?.webResults?.length || 0)} ${(filteredCommands?.length || 0) + (docData?.webResults?.length || 0) === 1 ? "resultado encontrado" : "resultados encontrados"}`
+                      : `${filteredCommands?.length || 0} referencias listadas`}
                   </span>
                 </div>
 
@@ -297,7 +286,7 @@ export default function DocsPage() {
                     {hasLocalResults && filteredCommands ? (
                       filteredCommands.map((cmd, idx) => (
                         <div
-                          key={idx}
+                          key={`cmd-${idx}`}
                           className="p-4 sm:p-5 transition hover:bg-white/[0.02]"
                         >
                           <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
@@ -344,34 +333,70 @@ export default function DocsPage() {
                       ))
                     ) : null}
 
-                    {hasExternalResults ? (
-                      <div className="p-4 sm:p-5 space-y-4 border-t border-zinc-800">
-                        <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-400">
-                          <Globe className="h-3.5 w-3.5" />
-                          Documentación oficial relevante
-                        </div>
-                        {docData?.webResults?.map((result, idx) => (
-                          <article
-                            key={idx}
-                            className="rounded-2xl border border-amber-500/15 bg-[#121821]/80 p-4 text-left shadow-[0_8px_20px_rgba(0,0,0,0.24)] transition hover:border-amber-400/30 hover:bg-[#151e2a]/90"
-                          >
-                            <div className="mb-2 flex items-center justify-between gap-3">
-                              <h4 className="text-sm font-bold text-white">{result.title}</h4>
-                              <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[9px] uppercase tracking-[0.16em] text-amber-200">
-                                Relevante
+                    {hasExternalResults && docData?.webResults ? (
+                      docData.webResults.map((result, idx) => (
+                        <div
+                          key={`web-${idx}`}
+                          className="p-4 sm:p-5 transition hover:bg-amber-500/[0.02] bg-amber-500/[0.01]"
+                        >
+                          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                            <div className="flex flex-col gap-2 min-w-[160px]">
+                              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold text-amber-200">
+                                <Globe className="h-3 w-3 text-amber-400" />
+                                {result.title}
+                              </span>
+                              <span className="text-[9px] uppercase tracking-[0.14em] text-amber-400/80 font-semibold px-1">
+                                Documentación oficial
                               </span>
                             </div>
-                            <div className="text-[11px] leading-relaxed text-zinc-300 whitespace-pre-line">
-                              {result.summary}
+
+                            <div className="flex-1 rounded-2xl border border-amber-500/20 bg-[#0c1319]/90 p-3 sm:p-4">
+                              <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+                                <div className="space-y-2">
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-amber-300 font-bold">
+                                    Información oficial
+                                  </p>
+                                  <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-line">
+                                    {result.summary}
+                                  </p>
+                                </div>
+
+                                <div className="space-y-2">
+                                  <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-400 font-bold">
+                                    Referencia Web
+                                  </p>
+                                  {result.url ? (
+                                    <a
+                                      href={result.url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs font-medium text-amber-200 transition hover:bg-amber-500/15"
+                                    >
+                                      <span>Ver en sitio oficial</span>
+                                      <ExternalLink className="h-3.5 w-3.5" />
+                                    </a>
+                                  ) : (
+                                    <span className="text-xs text-zinc-500 italic">Fuente oficial en vivo</span>
+                                  )}
+                                </div>
+                              </div>
                             </div>
-                          </article>
-                        ))}
-                      </div>
+                          </div>
+                        </div>
+                      ))
                     ) : null}
 
                     {!hasLocalResults && !hasExternalResults ? (
-                      <div className="p-5 text-xs text-zinc-400">
-                        No hay resultados para esta búsqueda.
+                      <div className="p-8 text-center text-xs text-zinc-400">
+                        <Search className="h-6 w-6 mx-auto mb-2 text-zinc-600" />
+                        <p className="font-semibold text-zinc-300">
+                          {searchQuery.trim()
+                            ? `No se encontraron referencias para "${searchQuery}"`
+                            : "No hay referencias disponibles para este módulo"}
+                        </p>
+                        <p className="text-zinc-500 mt-1">
+                          Prueba buscando con palabras clave como comandos, conceptos o sintaxis.
+                        </p>
                       </div>
                     ) : null}
                   </div>

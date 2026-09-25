@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
 import { ProgressProvider } from "@/lib/ProgressContext";
+import AiChatbot from "@/app/components/AiChatbot";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -32,7 +33,10 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>
-          <ProgressProvider>{children}</ProgressProvider>
+          <ProgressProvider>
+            {children}
+            <AiChatbot />
+          </ProgressProvider>
         </AuthProvider>
       </body>
     </html>
