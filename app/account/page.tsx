@@ -66,6 +66,8 @@ export default function AccountPage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [successMsg, setSuccessMsg] = useState("");
+  const [aiError, setAiError] = useState("");
+  const [aiSuccess, setAiSuccess] = useState("");
 
   const storageKey = user ? `devpracticelab_challenges_${user.email}` : "devpracticelab_challenges_guest";
 
@@ -160,6 +162,8 @@ export default function AccountPage() {
     if (!user) return;
 
     setModulesSaving(true);
+    setErrorMsg("");
+    setSuccessMsg("");
     try {
       const res = await fetch("/api/modules/subscribe", {
         method: "POST",
@@ -183,9 +187,38 @@ export default function AccountPage() {
   const saveAiConfig = async (provider: "gemini" | "ollama", setAsActive = true) => {
     if (!user) return;
     setAiSaving(true);
-    setErrorMsg("");
-    setSuccessMsg("");
+    setAiError("");
+    setAiSuccess("");
     try {
+      // Realizar prueba de conexión antes de mandar a BD
+      if (provider === "gemini") {
+        if (!geminiApiKey.trim()) {
+          throw new Error("Por favor ingresa tu API Key de Google Gemini.");
+        }
+        const testRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiApiKey.trim()}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: "ping" }] }] })
+        });
+        if (!testRes.ok) {
+          const errData = await testRes.json().catch(() => ({}));
+          throw new Error(errData.error?.message || "La prueba de conexión con Gemini falló. Verifica tu API Key y el modelo seleccionado.");
+        }
+      } else {
+        if (!ollamaBaseUrl.trim()) {
+          throw new Error("Por favor ingresa la URL Base de Ollama.");
+        }
+        const pingUrl = `${ollamaBaseUrl.trim().replace(/\/$/, '')}/api/tags`;
+        const testRes = await fetch(pingUrl, {
+          method: "GET",
+          headers: ollamaApiKey ? { "Authorization": `Bearer ${ollamaApiKey}` } : {}
+        }).catch(() => null);
+
+        if (!testRes || !testRes.ok) {
+          throw new Error("La prueba de conexión con Ollama falló. Verifica que el servidor esté activo y accesible.");
+        }
+      }
+
       const payload = provider === "gemini"
         ? {
             provider: "gemini",
@@ -216,10 +249,10 @@ export default function AccountPage() {
         setActiveProvider(provider);
       }
 
-      setSuccessMsg(`Configuración de ${provider === "gemini" ? "Google Gemini" : "Ollama"} guardada correctamente.`);
-      setTimeout(() => setSuccessMsg(""), 5000);
+      setAiSuccess(`¡Prueba de conexión exitosa! Configuración de ${provider === "gemini" ? "Google Gemini" : "Ollama"} guardada en la base de datos.`);
+      setTimeout(() => setAiSuccess(""), 5000);
     } catch (error) {
-      setErrorMsg((error as Error).message || "Error al guardar la configuración de IA.");
+      setAiError((error as Error).message || "Error al probar la conexión o guardar la configuración.");
     } finally {
       setAiSaving(false);
     }
@@ -362,7 +395,9 @@ export default function AccountPage() {
                       Cuenta Verificada
                     </span>
                   </div>
-                  <p className="text-sm text-zinc-400">{user.email}</p>
+                  <p className="text-sm text-zinc-400 mb-6">
+                    {user.email}
+                  </p>
                 </div>
               </div>
 
@@ -461,8 +496,9 @@ export default function AccountPage() {
           </div>
 
           <div className="grid gap-8 lg:grid-cols-3">
-            {/* Account Edit Form */}
-            <div className="lg:col-span-2">
+            {/* Left Column: Edit Form & AI Settings */}
+            <div className="lg:col-span-2 flex flex-col gap-8">
+              {/* Account Edit Form */}
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 md:p-8 backdrop-blur-md shadow-xl">
                 <div className="mb-6 pb-4 border-b border-zinc-800">
                   <h2 className="text-xl font-bold text-white flex items-center gap-2">
@@ -475,17 +511,12 @@ export default function AccountPage() {
                 </div>
 
                 {/* Alerts */}
-                {errorMsg && (
-                  <div className="mb-6 flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-xs text-red-400">
-                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                    <p>{errorMsg}</p>
-                  </div>
-                )}
-
-                {successMsg && (
-                  <div className="mb-6 flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-xs text-emerald-400">
-                    <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
-                    <p>{successMsg}</p>
+                {(errorMsg || successMsg) && (
+                  <div className={`mb-6 p-4 rounded-xl border text-xs font-medium flex items-center gap-2 ${
+                    errorMsg ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  }`}>
+                    {errorMsg ? <AlertCircle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+                    <span>{errorMsg || successMsg}</span>
                   </div>
                 )}
 
@@ -604,25 +635,246 @@ export default function AccountPage() {
                   </button>
                 </form>
               </div>
+
+              {/* AI Assistants Configuration */}
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 md:p-8 backdrop-blur-md shadow-xl">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Bot className="h-5 w-5 text-emerald-400" />
+                    Asistentes de IA (Gemini & Ollama)
+                  </h3>
+                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
+                    Activo: {activeProvider === "gemini" ? "Google Gemini" : "Ollama"}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 mb-6">
+                  Configura tu proveedor y modelo de inteligencia artificial favorito para el asistente de la plataforma.
+                </p>
+
+                {/* Alerts for AI Config */}
+                {(aiError || aiSuccess) && (
+                  <div className={`mb-4 p-3 rounded-xl border text-xs font-medium flex items-center gap-2 ${
+                    aiError ? "bg-red-500/10 border-red-500/30 text-red-400" : "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  }`}>
+                    {aiError ? <AlertCircle className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}
+                    <span>{aiError || aiSuccess}</span>
+                  </div>
+                )}
+
+                {/* Tabs */}
+                <div className="flex rounded-xl bg-zinc-950/80 p-1 border border-zinc-800 mb-6">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTabAi("gemini")}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition ${
+                      activeTabAi === "gemini"
+                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-sm"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    <Sparkles className="h-4 w-4 text-amber-400" />
+                    <span>Google Gemini</span>
+                    {activeProvider === "gemini" && (
+                      <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTabAi("ollama")}
+                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition ${
+                      activeTabAi === "ollama"
+                        ? "bg-sky-500/20 text-sky-300 border border-sky-500/30 shadow-sm"
+                        : "text-zinc-400 hover:text-white"
+                    }`}
+                  >
+                    <Server className="h-4 w-4 text-sky-400" />
+                    <span>Ollama (Local / Remoto)</span>
+                    {activeProvider === "ollama" && (
+                      <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
+                    )}
+                  </button>
+                </div>
+
+                {/* Gemini Form */}
+                {activeTabAi === "gemini" && (
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-zinc-300 flex items-center justify-between">
+                        <span>API Key de Google AI Studio</span>
+                        <a
+                          href="https://aistudio.google.com/app/apikey"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-amber-400 hover:underline inline-flex items-center gap-1"
+                        >
+                          Obtener clave gratis
+                        </a>
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showNewPassword ? "text" : "password"}
+                          value={geminiApiKey}
+                          onChange={(e) => setGeminiApiKey(e.target.value)}
+                          placeholder="AIzaSy..."
+                          className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 pl-4 pr-10 text-sm text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 transition font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-zinc-300"
+                        >
+                          {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-zinc-300">
+                        Modelo de Gemini
+                      </label>
+                      <select
+                        value={geminiModel}
+                        onChange={(e) => setGeminiModel(e.target.value)}
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 px-3 text-xs text-white focus:border-amber-500 focus:outline-none transition font-mono"
+                      >
+                        <option value="gemini-3.7-flash">gemini-3.7-flash (Última generación - Razonamiento Híbrido)</option>
+                        <option value="gemini-2.5-flash">gemini-2.5-flash (Alta velocidad y precisión)</option>
+                        <option value="gemini-2.5-pro">gemini-2.5-pro (Razonamiento profundo)</option>
+                        <option value="gemini-2.0-flash">gemini-2.0-flash (Ultra rápido)</option>
+                        <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite (Ligero / Bajo consumo)</option>
+                        <option value="gemini-1.5-flash">gemini-1.5-flash (Estable)</option>
+                        <option value="gemini-1.5-pro">gemini-1.5-pro (Contexto extenso)</option>
+                      </select>
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => saveAiConfig("gemini", true)}
+                        disabled={aiSaving}
+                        className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-xs font-bold text-zinc-950 transition hover:bg-amber-400 disabled:opacity-50 cursor-pointer shadow-md shadow-amber-500/10"
+                      >
+                        {aiSaving ? "Guardando..." : "Guardar y Activar Gemini"}
+                      </button>
+                      {activeProvider !== "gemini" && (
+                        <button
+                          type="button"
+                          onClick={() => switchActiveProvider("gemini")}
+                          className="px-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs font-semibold hover:bg-amber-500/20 transition cursor-pointer"
+                        >
+                          Activar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Ollama Form */}
+                {activeTabAi === "ollama" && (
+                  <div className="space-y-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-zinc-300">
+                        URL Base de Ollama
+                      </label>
+                      <input
+                        type="text"
+                        value={ollamaBaseUrl}
+                        onChange={(e) => setOllamaBaseUrl(e.target.value)}
+                        placeholder="http://localhost:11434"
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 px-4 text-xs text-white placeholder-zinc-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 transition font-mono"
+                      />
+                      <p className="text-[11px] text-zinc-500">
+                        Por defecto es <code>http://localhost:11434</code> para Ollama local.
+                      </p>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-zinc-300">
+                        Modelo de Ollama
+                      </label>
+                      <input
+                        type="text"
+                        value={ollamaModel}
+                        onChange={(e) => setOllamaModel(e.target.value)}
+                        placeholder="llama3, mistral, deepseek-r1..."
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 px-3 text-xs text-white focus:border-sky-500 focus:outline-none transition font-mono"
+                      />
+                      <div className="flex flex-wrap gap-1.5 pt-1.5">
+                        {["llama3", "llama3.2", "deepseek-r1", "mistral", "qwen2.5"].map((m) => (
+                          <button
+                            key={m}
+                            type="button"
+                            onClick={() => setOllamaModel(m)}
+                            className={`px-2.5 py-1 rounded-md text-xs font-mono transition border ${
+                              ollamaModel === m
+                                ? "border-sky-400 bg-sky-500/20 text-sky-200"
+                                : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:text-zinc-200"
+                            }`}
+                          >
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-zinc-300">
+                        API Key / Bearer Token (Opcional)
+                      </label>
+                      <input
+                        type="password"
+                        value={ollamaApiKey}
+                        onChange={(e) => setOllamaApiKey(e.target.value)}
+                        placeholder="Opcional si Ollama está protegido por token"
+                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 px-3 text-xs text-white focus:border-sky-500 focus:outline-none transition font-mono"
+                      />
+                    </div>
+
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={() => saveAiConfig("ollama", true)}
+                        disabled={aiSaving}
+                        className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-sky-500 py-3 text-xs font-bold text-zinc-950 transition hover:bg-sky-400 disabled:opacity-50 cursor-pointer shadow-md shadow-sky-500/10"
+                      >
+                        {aiSaving ? "Guardando..." : "Guardar y Activar Ollama"}
+                      </button>
+                      {activeProvider !== "ollama" && (
+                        <button
+                          type="button"
+                          onClick={() => switchActiveProvider("ollama")}
+                          className="px-4 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-200 text-xs font-semibold hover:bg-sky-500/20 transition cursor-pointer"
+                        >
+                          Activar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Side summary: Practice Shortcuts & Progress */}
-            <div className="space-y-6">
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md">
-                <div className="mb-5 flex items-center justify-between gap-3">
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <Award className="h-4 w-4 text-emerald-400" />
-                    Módulos de Suscripción
-                  </h3>
+            {/* Right Column: Sidebar (Modules, Terminal Progress, CTA) */}
+            <div className="flex flex-col gap-8">
+              {/* Subscription Modules */}
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md shadow-xl">
+                <div className="flex items-center justify-between gap-3 mb-4">
+                  <div className="flex items-center gap-2">
+                    <Award className="h-5 w-5 text-emerald-400" />
+                    <h3 className="text-base font-bold text-white">Módulos de Suscripción</h3>
+                  </div>
                   <button
                     type="button"
                     onClick={saveModuleSubscriptions}
                     disabled={modulesSaving}
-                    className="rounded-lg bg-emerald-500 px-3 py-1.5 text-[10px] font-bold text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-50"
+                    className="rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-bold text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-50 shadow-sm"
                   >
-                    {modulesSaving ? "Guardando..." : "Guardar"}
+                    {modulesSaving ? "Guardando..." : "Guardar Módulos"}
                   </button>
                 </div>
+                <p className="text-xs text-zinc-400 mb-4">
+                  Selecciona los módulos a los que deseas estar suscrito para personalizar tu experiencia de aprendizaje.
+                </p>
 
                 <div className="space-y-3">
                   {availableModules.length === 0 ? (
@@ -635,7 +887,7 @@ export default function AccountPage() {
                           type="button"
                           key={module.slug}
                           onClick={() => toggleModule(module.slug)}
-                          className={`w-full rounded-xl border p-3 text-left transition ${
+                          className={`w-full rounded-xl border p-3.5 text-left transition ${
                             selected
                               ? "border-emerald-500/40 bg-emerald-500/10"
                               : "border-zinc-800 bg-zinc-950/50 hover:border-zinc-700"
@@ -646,7 +898,7 @@ export default function AccountPage() {
                               <div className="text-sm font-bold text-white">{module.name}</div>
                               <div className="mt-0.5 text-[11px] text-zinc-400">{module.description}</div>
                             </div>
-                            <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-bold ${
+                            <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-bold shrink-0 ${
                               selected
                                 ? "border-emerald-500 bg-emerald-500 text-zinc-950"
                                 : "border-zinc-700 bg-zinc-900 text-zinc-500"
@@ -661,277 +913,70 @@ export default function AccountPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md">
-                <div className="flex items-center justify-between gap-3 mb-4">
-                  <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <Bot className="h-4 w-4 text-emerald-400" />
-                    Asistentes de IA (Gemini & Ollama)
-                  </h3>
-                  <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-300">
-                    Activo: {activeProvider === "gemini" ? "Gemini" : "Ollama"}
-                  </span>
-                </div>
-
-                {/* Tabs para seleccionar Gemini u Ollama */}
-                <div className="flex rounded-xl bg-zinc-950/80 p-1 border border-zinc-800 mb-4">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTabAi("gemini")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition ${
-                      activeTabAi === "gemini"
-                        ? "bg-amber-500/20 text-amber-300 border border-amber-500/30 shadow-sm"
-                        : "text-zinc-400 hover:text-white"
-                    }`}
-                  >
-                    <Sparkles className="h-3.5 w-3.5 text-amber-400" />
-                    <span>Google Gemini</span>
-                    {activeProvider === "gemini" && (
-                      <span className="ml-1 h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTabAi("ollama")}
-                    className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition ${
-                      activeTabAi === "ollama"
-                        ? "bg-sky-500/20 text-sky-300 border border-sky-500/30 shadow-sm"
-                        : "text-zinc-400 hover:text-white"
-                    }`}
-                  >
-                    <Server className="h-3.5 w-3.5 text-sky-400" />
-                    <span>Ollama (Local / Remoto)</span>
-                    {activeProvider === "ollama" && (
-                      <span className="ml-1 h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
-                    )}
-                  </button>
-                </div>
-
-                {/* Formulario de Google Gemini */}
-                {activeTabAi === "gemini" && (
-                  <div className="space-y-4 animate-fadeIn">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-zinc-400 flex items-center justify-between">
-                        <span>API Key de Google AI Studio</span>
-                        <a
-                          href="https://aistudio.google.com/app/apikey"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[10px] text-amber-400 hover:underline inline-flex items-center gap-1"
-                        >
-                          Obtener clave gratis
-                        </a>
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showNewPassword ? "text" : "password"}
-                          value={geminiApiKey}
-                          onChange={(e) => setGeminiApiKey(e.target.value)}
-                          placeholder="AIzaSy..."
-                          className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 pl-4 pr-10 text-xs text-white placeholder-zinc-500 focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500 transition font-mono"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowNewPassword(!showNewPassword)}
-                          className="absolute inset-y-0 right-0 flex items-center pr-3 text-zinc-500 hover:text-zinc-300"
-                        >
-                          {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-zinc-400">
-                        Modelo de Gemini
-                      </label>
-                      <select
-                        value={geminiModel}
-                        onChange={(e) => setGeminiModel(e.target.value)}
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2 px-3 text-xs text-white focus:border-amber-500 focus:outline-none transition font-mono"
-                      >
-                        <option value="gemini-3.7-flash">gemini-3.7-flash (Última generación - Razonamiento Híbrido)</option>
-                        <option value="gemini-2.5-flash">gemini-2.5-flash (Alta velocidad y precisión)</option>
-                        <option value="gemini-2.5-pro">gemini-2.5-pro (Razonamiento profundo)</option>
-                        <option value="gemini-2.0-flash">gemini-2.0-flash (Ultra rápido)</option>
-                        <option value="gemini-2.0-flash-lite">gemini-2.0-flash-lite (Ligero / Bajo consumo)</option>
-                        <option value="gemini-1.5-flash">gemini-1.5-flash (Estable)</option>
-                        <option value="gemini-1.5-pro">gemini-1.5-pro (Contexto extenso)</option>
-                      </select>
-                    </div>
-
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => saveAiConfig("gemini", true)}
-                        disabled={aiSaving}
-                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-amber-500 py-2 text-xs font-bold text-zinc-950 transition hover:bg-amber-400 disabled:opacity-50 cursor-pointer shadow-md shadow-amber-500/10"
-                      >
-                        {aiSaving ? "Guardando..." : "Guardar y Activar Gemini"}
-                      </button>
-                      {activeProvider !== "gemini" && (
-                        <button
-                          type="button"
-                          onClick={() => switchActiveProvider("gemini")}
-                          className="px-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs font-semibold hover:bg-amber-500/20 transition cursor-pointer"
-                          title="Usar como proveedor activo"
-                        >
-                          Activar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Formulario de Ollama */}
-                {activeTabAi === "ollama" && (
-                  <div className="space-y-4 animate-fadeIn">
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-zinc-400">
-                        URL Base de Ollama
-                      </label>
-                      <input
-                        type="text"
-                        value={ollamaBaseUrl}
-                        onChange={(e) => setOllamaBaseUrl(e.target.value)}
-                        placeholder="http://localhost:11434"
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 px-4 text-xs text-white placeholder-zinc-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 transition font-mono"
-                      />
-                      <p className="text-[10px] text-zinc-500">
-                        Por defecto es <code>http://localhost:11434</code> para Ollama local.
-                      </p>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-zinc-400">
-                        Modelo de Ollama
-                      </label>
-                      <input
-                        type="text"
-                        value={ollamaModel}
-                        onChange={(e) => setOllamaModel(e.target.value)}
-                        placeholder="llama3, mistral, deepseek-r1..."
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2 px-3 text-xs text-white focus:border-sky-500 focus:outline-none transition font-mono"
-                      />
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        {["llama3", "llama3.2", "deepseek-r1", "mistral", "qwen2.5"].map((m) => (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => setOllamaModel(m)}
-                            className={`px-2 py-0.5 rounded-md text-[10px] font-mono transition border ${
-                              ollamaModel === m
-                                ? "border-sky-400 bg-sky-500/20 text-sky-200"
-                                : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:text-zinc-200"
-                            }`}
-                          >
-                            {m}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-[11px] font-medium text-zinc-400">
-                        API Key / Bearer Token (Opcional)
-                      </label>
-                      <input
-                        type="password"
-                        value={ollamaApiKey}
-                        onChange={(e) => setOllamaApiKey(e.target.value)}
-                        placeholder="Opcional si Ollama está protegido por token"
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2 px-3 text-xs text-white focus:border-sky-500 focus:outline-none transition font-mono"
-                      />
-                    </div>
-
-                    <div className="flex gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={() => saveAiConfig("ollama", true)}
-                        disabled={aiSaving}
-                        className="flex-1 flex items-center justify-center gap-1.5 rounded-xl bg-sky-500 py-2 text-xs font-bold text-zinc-950 transition hover:bg-sky-400 disabled:opacity-50 cursor-pointer shadow-md shadow-sky-500/10"
-                      >
-                        {aiSaving ? "Guardando..." : "Guardar y Activar Ollama"}
-                      </button>
-                      {activeProvider !== "ollama" && (
-                        <button
-                          type="button"
-                          onClick={() => switchActiveProvider("ollama")}
-                          className="px-3 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-200 text-xs font-semibold hover:bg-sky-500/20 transition cursor-pointer"
-                          title="Usar como proveedor activo"
-                        >
-                          Activar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md">
+              {/* Terminal Progress */}
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md shadow-xl">
                 <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-                  <Award className="h-4 w-4 text-emerald-400" />
+                  <Award className="h-5 w-5 text-emerald-400" />
                   Progreso en Terminales
                 </h3>
 
                 <div className="space-y-4">
                   {/* SSH */}
                   <Link href="/ssh" className="block group">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-semibold text-green-400 flex items-center gap-1.5">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="font-semibold text-green-400 flex items-center gap-1.5 group-hover:underline">
                         <Server className="h-3.5 w-3.5" /> SSH
                       </span>
                       <span className="text-zinc-400 font-mono">{sshStats.percentage}%</span>
                     </div>
-                    <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
                       <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${Math.max(sshStats.percentage, 4)}%` }} />
                     </div>
                   </Link>
 
                   {/* Docker */}
                   <Link href="/docker" className="block group">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-semibold text-sky-400 flex items-center gap-1.5">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="font-semibold text-sky-400 flex items-center gap-1.5 group-hover:underline">
                         <Container className="h-3.5 w-3.5" /> Docker
                       </span>
                       <span className="text-zinc-400 font-mono">{dockerStats.percentage}%</span>
                     </div>
-                    <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
                       <div className="h-full bg-sky-500 transition-all duration-500" style={{ width: `${Math.max(dockerStats.percentage, 4)}%` }} />
                     </div>
                   </Link>
 
                   {/* PostgreSQL */}
                   <Link href="/postgres" className="block group">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-semibold text-indigo-400 flex items-center gap-1.5">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="font-semibold text-indigo-400 flex items-center gap-1.5 group-hover:underline">
                         <Database className="h-3.5 w-3.5" /> PostgreSQL
                       </span>
                       <span className="text-zinc-400 font-mono">{postgresStats.percentage}%</span>
                     </div>
-                    <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
                       <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${Math.max(postgresStats.percentage, 4)}%` }} />
                     </div>
                   </Link>
 
                   {/* TypeScript */}
                   <Link href="/typescript" className="block group">
-                    <div className="flex items-center justify-between text-xs mb-1">
-                      <span className="font-semibold text-blue-400 flex items-center gap-1.5">
+                    <div className="flex items-center justify-between text-xs mb-1.5">
+                      <span className="font-semibold text-blue-400 flex items-center gap-1.5 group-hover:underline">
                         <Code2 className="h-3.5 w-3.5" /> TypeScript
                       </span>
                       <span className="text-zinc-400 font-mono">{tsStats.percentage}%</span>
                     </div>
-                    <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden">
+                    <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
                       <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${Math.max(tsStats.percentage, 4)}%` }} />
                     </div>
                   </Link>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md">
-                <h3 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-                  <Award className="h-4 w-4 text-emerald-400" />
-                  Quick Practicing CTA
-                </h3>
+              {/* Quick Practicing CTA */}
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md shadow-xl">
                 <div className="flex items-center gap-2 text-blue-400 font-bold text-sm mb-2">
                   <Code2 className="h-5 w-5" />
                   <span>¡Nuevo módulo disponible!</span>
@@ -941,10 +986,10 @@ export default function AccountPage() {
                 </p>
                 <Link
                   href="/typescript"
-                  className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-2.5 transition"
+                  className="inline-flex items-center justify-center gap-2 w-full rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold px-4 py-3 transition shadow-md"
                 >
                   <span>Ir a Práctica TypeScript</span>
-                  <ArrowRight className="h-3.5 w-3.5" />
+                  <ArrowRight className="h-4 w-4" />
                 </Link>
               </div>
             </div>

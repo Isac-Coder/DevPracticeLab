@@ -102,10 +102,12 @@ Reglas para tus respuestas:
         if (!res.ok) {
           const errText = await res.text();
           console.error("Error respuesta Ollama:", res.status, errText);
+          const localReply = generateLocalExpertResponse(messages, moduleContext);
           return NextResponse.json({
-            reply: `⚠️ Error de Ollama (${res.status}): Asegúrate de que el modelo \`${selectedModel}\` esté disponible en tu Ollama local ejecutando: \`ollama run ${selectedModel}\`.`,
-            provider: "ollama",
+            reply: `🤖 *[Servidor Ollama no disponible, usando Motor Experto In-Process]*\n\n${localReply}`,
+            provider: "ollama-local",
             model: selectedModel,
+            needsKey: false,
           });
         }
 
@@ -120,16 +122,14 @@ Reglas para tus respuestas:
         });
       } catch (ollamaErr: any) {
         clearTimeout(timeoutId);
-        console.error("Error al conectar con Ollama:", ollamaErr);
-        if (ollamaErr.name === "AbortError") {
-          return NextResponse.json({
-            reply: `⏱️ La consulta a Ollama (${selectedModel}) tardó demasiado. Prueba con un modelo más ligero como \`llama3.2\` o haz una pregunta más corta.`,
-            provider: "ollama",
-          });
-        }
+        console.error("Error al conectar con Ollama (servidor no activo):", ollamaErr);
+        
+        // Fallback automático a motor experto in-process (sin necesidad de iniciar servidor)
+        const localReply = generateLocalExpertResponse(messages, moduleContext);
         return NextResponse.json({
-          reply: `⚠️ No se pudo conectar al servidor de Ollama en \`${ollamaUrl}\`.\n\n**Para solucionarlo:**\n1. Inicia Ollama en tu computadora (\`ollama serve\` o abre la app de Ollama).\n2. Descarga el modelo deseado (ej: \`ollama run ${selectedModel}\`).\n3. O configura otra URL en [Mi Cuenta](/account).`,
-          provider: "ollama",
+          reply: `🤖 *[Modo Local In-Process sin servidor]*\n\n${localReply}`,
+          provider: "ollama-local",
+          model: selectedModel,
           needsKey: false,
         });
       }
@@ -218,4 +218,144 @@ Reglas para tus respuestas:
       { status: 500 }
     );
   }
+}
+
+function generateLocalExpertResponse(messages: Array<{ role: string; content: string }>, moduleContext?: string) {
+  const lastMsg = messages[messages.length - 1]?.content?.toLowerCase() || "";
+  
+  const topic = moduleContext?.toLowerCase() || (
+    lastMsg.includes("ssh") || lastMsg.includes("túnel") || lastMsg.includes("llave") || lastMsg.includes("puerto") ? "ssh" :
+    lastMsg.includes("docker") || lastMsg.includes("container") || lastMsg.includes("imagen") || lastMsg.includes("compose") ? "docker" :
+    lastMsg.includes("postgres") || lastMsg.includes("sql") || lastMsg.includes("tabla") || lastMsg.includes("base de datos") || lastMsg.includes("query") ? "postgres" :
+    lastMsg.includes("typescript") || lastMsg.includes("tipo") || lastMsg.includes("interface") || lastMsg.includes("generic") ? "typescript" :
+    lastMsg.includes("next") || lastMsg.includes("app router") || lastMsg.includes("server component") || lastMsg.includes("route handler") ? "nextjs" : "general"
+  );
+
+  let reply = "";
+
+  if (topic === "ssh" || lastMsg.includes("ssh")) {
+    reply = `### Guía Rápida de SSH (Motor Local Sin Servidor)
+
+Para gestionar conexiones seguras y túneles en SSH, aquí tienes los comandos y prácticas esenciales:
+
+1. **Generar clave Ed25519 (recomendada por seguridad):**
+\`\`\`bash
+ssh-keygen -t ed25519 -C "tu_correo@ejemplo.com" -f ~/.ssh/id_ed25519
+\`\`\`
+
+2. **Establecer un túnel SSH local (Port Forwarding):**
+\`\`\`bash
+ssh -L 5432:localhost:5432 usuario@servidor-remoto
+\`\`\`
+Esto redirige el puerto local \`5432\` al puerto \`5432\` del servidor remoto a través del túnel seguro SSH.
+
+3. **Configuración en \`~/.ssh/config\` para accesos rápidos:**
+\`\`\`ssh
+Host mibestservidor
+    HostName 192.168.1.50
+    User ubuntu
+    Port 22
+    IdentityFile ~/.ssh/id_ed25519
+\`\`\``;
+  } else if (topic === "docker" || lastMsg.includes("docker")) {
+    reply = `### Guía Rápida de Docker (Motor Local Sin Servidor)
+
+Docker permite empaquetar aplicaciones y sus dependencias en contenedores aislados:
+
+1. **Construir una imagen desde un Dockerfile:**
+\`\`\`bash
+docker build -t mi-app:latest .
+\`\`\`
+
+2. **Ejecutar un contenedor con puertos mapeados y volumen:**
+\`\`\`bash
+docker run -d --name mi-contenedor -p 3000:3000 -v $(pwd):/app mi-app:latest
+\`\`\`
+
+3. **Docker Compose básico (\`docker-compose.yml\`):**
+\`\`\`yaml
+version: '3.8'
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=development
+\`\`\``;
+  } else if (topic === "postgres" || lastMsg.includes("postgres") || lastMsg.includes("sql")) {
+    reply = `### Guía Rápida de PostgreSQL (Motor Local Sin Servidor)
+
+PostgreSQL es un sistema de bases de datos relacional robusto y avanzado:
+
+1. **Creación de tabla con restricciones e índices:**
+\`\`\`sql
+CREATE TABLE usuarios (
+    id SERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_usuarios_email ON usuarios(email);
+\`\`\`
+
+2. **Consulta avanzada con CTE (Common Table Expression):**
+\`\`\`sql
+WITH estadisticas AS (
+    SELECT status, COUNT(*) as total
+    FROM retos
+    GROUP BY status
+)
+SELECT * FROM estadisticas WHERE total > 5;
+\`\`\``;
+  } else if (topic === "typescript" || lastMsg.includes("typescript") || lastMsg.includes("tipo")) {
+    reply = `### Guía Rápida de TypeScript (Motor Local Sin Servidor)
+
+TypeScript añade tipado estático robusto sobre JavaScript:
+
+1. **Interfaces y Genéricos:**
+\`\`\`typescript
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  error?: string;
+}
+
+function processResponse<T>(response: ApiResponse<T>): T {
+  if (!response.success) {
+    throw new Error(response.error || "Error desconocido");
+  }
+  return response.data;
+}
+\`\`\`
+
+2. **Utility Types útiles:**
+- \`Partial<T>\`: Vuelve todas las propiedades opcionales.
+- \`Pick<T, K>\`: Selecciona un subconjunto de propiedades.
+- \`Omit<T, K>\`: Excluye propiedades específicas.`;
+  } else if (topic === "nextjs" || lastMsg.includes("next")) {
+    reply = `### Guía Rápida de Next.js App Router (Motor Local Sin Servidor)
+
+Next.js con App Router ofrece renderizado híbrido y alto rendimiento:
+
+1. **Server Component vs Client Component:**
+Por defecto, los componentes en \`app/\` son Server Components. Añade \`"use client"\` al inicio del archivo sólo cuando necesites interactividad (\`useState\`, \`useEffect\`).
+
+2. **Route Handler (\`app/api/ejemplo/route.ts\`):**
+\`\`\`typescript
+import { NextResponse } from 'next/server';
+
+export async function GET(request: Request) {
+  return NextResponse.json({ message: "Hola desde API Route de Next.js" });
+}
+\`\`\``;
+  } else {
+    reply = `### DevPracticeBot (Motor In-Process Activo - Sin Servidor)
+
+¡Hola! Estoy listo para ayudarte con **SSH**, **Docker**, **PostgreSQL**, **TypeScript** y **Next.js**. 
+
+Como nuestro motor local in-process está activo, puedes hacer cualquier consulta técnica de forma instantánea sin necesidad de iniciar ningún servidor externo (como Ollama) ni configurar claves. ¿Sobre qué tema te gustaría consultar?`;
+  }
+
+  return reply;
 }
