@@ -122,6 +122,8 @@ export default function AiChatbot() {
 
     if (isOpen) {
       fetchActiveProvider();
+      const interval = setInterval(fetchActiveProvider, 30000);
+      return () => clearInterval(interval);
     }
   }, [isOpen]);
 
@@ -165,21 +167,46 @@ export default function AiChatbot() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          messages: newMessages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          moduleContext: currentModule,
-          providerOverride: selectedProvider,
-        }),
-      });
+      let attempts = 0;
+      let res;
+      let success = false;
 
-      if (!res.ok) {
-        throw new Error("Error en la respuesta del servidor.");
+      while (attempts < 3 && !success) {
+        attempts++;
+        try {
+          res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              messages: newMessages.map((m) => ({
+                role: m.role,
+                content: m.content,
+              })),
+              moduleContext: currentModule,
+              providerOverride: selectedProvider,
+            }),
+          });
+
+          if (res.ok) {
+            success = true;
+          } else {
+            // If it's a 429 or 503, we definitely want to retry. 
+            // For other errors, we might still retry in case of transient network issues.
+            if (res.status !== 400 && res.status !== 401 && res.status !== 403) {
+              console.warn(`Chat API attempt ${attempts} failed with status ${res.status}. Retrying...`);
+              if (attempts < 3) await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+            } else {
+              break; // Stop retrying on client errors
+            }
+          }
+        } catch (fetchErr) {
+          console.error(`Chat API attempt ${attempts} network error:`, fetchErr);
+          if (attempts < 3) await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+        }
+      }
+
+      if (!res || !res.ok) {
+        throw new Error(res ? `Server responded with ${res.status}` : "Network error after 3 attempts");
       }
 
       const data = await res.json();
@@ -204,7 +231,7 @@ export default function AiChatbot() {
         {
           id: `msg-err-${Date.now()}`,
           role: "assistant",
-          content: "⚠️ Hubo un error de conexión al consultar el asistente. Intenta de nuevo.",
+          content: "⚠️ Hubo un error de conexión persistente al consultar el asistente. Intenta de nuevo más tarde.",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         },
       ]);

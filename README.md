@@ -32,6 +32,15 @@ Construido con [Next.js](https://nextjs.org) 16.3.6, [React](https://react.dev) 
   - Sección dedicada a App Router, layouts, rendering, rutas, metadata y estructuras propias de Next.js.
   - Integrado con el flujo de progreso del usuario y el editor de práctica.
 
+- **Asistente de IA Integrado (DevPracticeBot)** (`/components/AiChatbot.tsx`)
+  - Chat técnico especializado en SSH, Docker, PostgreSQL, TypeScript y Next.js.
+  - Soporte multi-proveedor: Cambio dinámico entre Gemini y Ollama.
+  - Memoria de conversación persistente mediante `localStorage` por usuario.
+  - Sistema de resiliencia: Mecanismo de reintento automático (hasta 3 intentos) ante errores de API.
+  - Sincronización en tiempo real: Refresco automático de configuraciones de IA cada 30 segundos.
+  - Contexto dinámico: El bot detecta automáticamente en qué módulo se encuentra el usuario para ajustar sus respuestas.
+  - Fallback experto: Respuestas locales predefinidas si los servicios de IA externos no están disponibles.
+
 - **Autenticación, cuenta y suscripción por módulo** (`/login`, `/register`, `/account`)
   - Registro con bcrypt y JWT HTTP-only.
   - Gestión del perfil del usuario.

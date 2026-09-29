@@ -37,6 +37,12 @@ Plataforma educativa de práctica técnica para **SSH**, **Docker**, **PostgreSQ
 - **Diseño visual del docs page refinado:** más legible, menos saturado y más orientado a contenido editorial.
 - **Suscripciones por módulo:** el usuario puede elegir los módulos activos a los que quiere suscribirse y se guarda en tablas de relación con la base de datos.
 - **DB resilient:** se validan tablas faltantes antes de CRUD y se crea la estructura del sistema de módulos y usuarios si hace falta.
+- **AI Chatbot avanzado:** implementación de un asistente técnico (`AiChatbot`) con:
+  - Soporte para Gemini y Ollama con cambio de proveedor en tiempo real.
+  - Persistencia de chat por usuario en `localStorage`.
+  - Capa de fiabilidad: bucle de reintento de 3 intentos para llamadas a la API y refresco de config cada 30s.
+  - Lógica de fallback "Expert Local" para garantizar disponibilidad.
+  - Prompting especializado y restrictivo para asegurar precisión técnica y evitar alucinaciones.
 
 ## Arquitectura
 
