@@ -214,7 +214,7 @@ const searchWebForCommand = async (moduleParam: string, query: string, apiKey?: 
     try {
       const prompt = `Busca contenido documental oficial y relevante sobre "${queryTerms}" para ${moduleKey}. Devuelve SOLO JSON válido con esta estructura: {"results":[{"title":"...","summary":"..."}]} y máximo 3 resultados. Debe ser contenido documental, no enlaces ni anuncios. No agregues texto extra.`;
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${encodeURIComponent(finalApiKey.trim())}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${encodeURIComponent(finalApiKey.trim())}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

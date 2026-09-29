@@ -18,6 +18,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
+import { useAuth } from "@/lib/AuthContext";
 
 interface Message {
   id: string;
@@ -36,24 +37,66 @@ const QUICK_PROMPTS = [
 
 export default function AiChatbot() {
   const pathname = usePathname();
+  const { user } = useAuth();
+
+  if (!user) return null;
+
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [inputMessage, setInputMessage] = useState("");
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "welcome",
-      role: "assistant",
-      content: "¡Hola! 👋 Soy tu asistente técnico de **DevPracticeLab**. ¿Tienes alguna duda sobre **SSH**, **Docker**, **PostgreSQL**, **TypeScript** o **Next.js**?",
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    },
-  ]);
+
+  const chatStorageKey = user ? `devpracticelab_chat_${user.email}` : "devpracticelab_chat_guest";
+
+  const [messages, setMessages] = useState<Message[]>(() => {
+    try {
+      const saved = typeof window !== "undefined" ? localStorage.getItem(chatStorageKey) : null;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // no-op
+    }
+    return [
+      {
+        id: "welcome",
+        role: "assistant",
+        content: "¡Hola! 👋 Soy tu asistente técnico de **DevPracticeLab**. ¿Tienes alguna duda sobre **SSH**, **Docker**, **PostgreSQL**, **TypeScript** o **Next.js**?",
+        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      },
+    ];
+  });
+
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<"gemini" | "ollama">("gemini");
   const [currentModelName, setCurrentModelName] = useState<string>("gemini-3.7-flash");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Sincronizar mensajes con localStorage ante cambios o cambio de usuario
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(chatStorageKey);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+        }
+      }
+    } catch {
+      // no-op
+    }
+  }, [chatStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(chatStorageKey, JSON.stringify(messages));
+    } catch {
+      // no-op
+    }
+  }, [messages, chatStorageKey]);
 
   // Obtener proveedor activo de la base de datos al abrir
   useEffect(() => {
@@ -185,14 +228,18 @@ export default function AiChatbot() {
   };
 
   const clearChat = () => {
-    setMessages([
-      {
-        id: "welcome",
-        role: "assistant",
-        content: "Chat reiniciado. ¿En qué te puedo ayudar hoy?",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      },
-    ]);
+    const initialMsg: Message = {
+      id: "welcome",
+      role: "assistant",
+      content: "Chat reiniciado. ¿En qué te puedo ayudar hoy?",
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+    setMessages([initialMsg]);
+    try {
+      localStorage.setItem(chatStorageKey, JSON.stringify([initialMsg]));
+    } catch {
+      // no-op
+    }
   };
 
   // Renderizador simple de Markdown (bloques de código, negritas y enlaces)
@@ -303,8 +350,8 @@ export default function AiChatbot() {
       {/* Ventana del Chatbot */}
       {isOpen && (
         <div
-          className={`mb-3 w-[92vw] max-w-[420px] rounded-3xl border border-white/15 bg-[#091017]/95 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_rgba(16,185,129,0.12)] transition-all duration-200 flex flex-col overflow-hidden ${
-            isMinimized ? "h-14" : "h-[560px] max-h-[82vh]"
+          className={`mb-3 w-[94vw] max-w-[480px] rounded-3xl border border-white/15 bg-[#091017]/95 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_rgba(16,185,129,0.12)] transition-all duration-200 flex flex-col overflow-hidden ${
+            isMinimized ? "h-14" : "h-[640px] max-h-[88vh]"
           }`}
         >
           {/* Header */}

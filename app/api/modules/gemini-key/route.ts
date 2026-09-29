@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
     // UPSERT: Insert if not exists, update if it does for provider 'gemini'
     const query = `
       INSERT INTO public.user_api_keys (user_id, provider, api_key, model, is_active, updated_at)
-      VALUES ($1, 'gemini', $2, 'gemini-2.0-flash', TRUE, CURRENT_TIMESTAMP)
+      VALUES ($1, 'gemini', $2, 'gemini-3.7-flash', TRUE, CURRENT_TIMESTAMP)
       ON CONFLICT (user_id, provider) 
       DO UPDATE SET api_key = EXCLUDED.api_key, is_active = TRUE, updated_at = CURRENT_TIMESTAMP
       RETURNING id;

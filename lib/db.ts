@@ -669,7 +669,7 @@ export async function getUserAiConfigs(userId: number | string): Promise<UserApi
       const res = await pool.query(
         `SELECT id, user_id, provider, api_key, base_url, model, is_active, updated_at 
          FROM user_api_keys 
-         WHERE user_id = $1::text 
+         WHERE user_id::text = $1::text 
          ORDER BY updated_at DESC`,
         [String(userId)]
       );
@@ -718,7 +718,7 @@ export async function saveUserAiConfig(
     try {
       if (isActive) {
         await pool.query(
-          "UPDATE user_api_keys SET is_active = FALSE WHERE user_id = $1::text",
+          "UPDATE user_api_keys SET is_active = FALSE WHERE user_id::text = $1::text",
           [normUserId]
         );
       }
@@ -726,7 +726,7 @@ export async function saveUserAiConfig(
       const updateRes = await pool.query(
         `UPDATE user_api_keys 
          SET api_key = $1, base_url = $2, model = $3, is_active = $4, updated_at = CURRENT_TIMESTAMP 
-         WHERE user_id = $5::text AND provider = $6 
+         WHERE user_id::text = $5::text AND provider = $6 
          RETURNING id, user_id, provider, api_key, base_url, model, is_active, updated_at`,
         [safeApiKey.trim(), defBaseUrl.trim(), defModel.trim(), isActive, normUserId, normProvider]
       );
@@ -747,7 +747,7 @@ export async function saveUserAiConfig(
 
       const insertRes = await pool.query(
         `INSERT INTO user_api_keys (user_id, provider, api_key, base_url, model, is_active, updated_at) 
-         VALUES ($1::text, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) 
+         VALUES ($1::text::integer, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) 
          RETURNING id, user_id, provider, api_key, base_url, model, is_active, updated_at`,
         [normUserId, normProvider, safeApiKey.trim(), defBaseUrl.trim(), defModel.trim(), isActive]
       );

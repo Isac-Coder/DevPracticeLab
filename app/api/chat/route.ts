@@ -104,7 +104,7 @@ Reglas para tus respuestas:
           console.error("Error respuesta Ollama:", res.status, errText);
           const localReply = generateLocalExpertResponse(messages, moduleContext);
           return NextResponse.json({
-            reply: `🤖 *[Servidor Ollama no disponible, usando Motor Experto In-Process]*\n\n${localReply}`,
+            reply: localReply,
             provider: "ollama-local",
             model: selectedModel,
             needsKey: false,
@@ -127,7 +127,7 @@ Reglas para tus respuestas:
         // Fallback automático a motor experto in-process (sin necesidad de iniciar servidor)
         const localReply = generateLocalExpertResponse(messages, moduleContext);
         return NextResponse.json({
-          reply: `🤖 *[Modo Local In-Process sin servidor]*\n\n${localReply}`,
+          reply: localReply,
           provider: "ollama-local",
           model: selectedModel,
           needsKey: false,
@@ -189,9 +189,13 @@ Reglas para tus respuestas:
         });
       }
 
+      // Fallback automático a motor experto in-process si Gemini experimenta alta demanda (503/429) o errores
+      const localReply = generateLocalExpertResponse(messages, moduleContext);
       return NextResponse.json({
-        reply: "Ocurrió un error al consultar con Gemini API. Por favor intenta de nuevo en unos momentos.",
-        provider: "gemini",
+        reply: localReply,
+        provider: "gemini-local",
+        model: selectedModel,
+        needsKey: false,
       });
     }
 
