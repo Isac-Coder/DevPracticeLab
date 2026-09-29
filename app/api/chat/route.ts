@@ -78,7 +78,7 @@ Reglas estrictas para tus respuestas:
       ];
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 25000);
+      const timeoutId = setTimeout(() => controller.abort(), 120000);
 
       try {
         const headers: Record<string, string> = {
@@ -157,7 +157,7 @@ Reglas estrictas para tus respuestas:
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 18000);
+    const timeoutId = setTimeout(() => controller.abort(), 120000);
 
     const res = await fetch(geminiUrl, {
       method: "POST",

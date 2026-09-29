@@ -477,21 +477,33 @@ export default function AiChatbot() {
                           <Bot className="h-3.5 w-3.5" />
                         </div>
                       )}
-                      <div
-                        className={`max-w-[85%] rounded-2xl p-3.5 ${
-                          isUser
-                            ? "border border-emerald-500/30 bg-emerald-500/15 text-white shadow-sm"
-                            : "border border-white/10 bg-white/[0.04] text-zinc-200"
-                        }`}
-                      >
-                        {isUser ? (
-                          <p className="text-xs leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                        ) : (
-                          renderFormattedMessage(msg.content, msg.id)
+                      <div className="flex flex-col items-end gap-1">
+                        <div
+                          className={`max-w-[85%] rounded-2xl p-3.5 ${
+                            isUser
+                              ? "border border-emerald-500/30 bg-emerald-500/15 text-white shadow-sm"
+                              : "border border-white/10 bg-white/[0.04] text-zinc-200"
+                          }`}
+                        >
+                          {isUser ? (
+                            <p className="text-xs leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                          ) : (
+                            renderFormattedMessage(msg.content, msg.id)
+                          )}
+                          <span className="mt-1.5 block text-[9px] text-zinc-500 text-right">
+                            {msg.timestamp}
+                          </span>
+                        </div>
+                        {isUser && (
+                          <button
+                            onClick={() => handleSendMessage(msg.content)}
+                            disabled={loading}
+                            className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] text-zinc-500 hover:text-emerald-300 transition cursor-pointer font-medium opacity-60 hover:opacity-100"
+                          >
+                            <Sparkles className="h-2.5 w-2.5" />
+                            <span>Repetir</span>
+                          </button>
                         )}
-                        <span className="mt-1.5 block text-[9px] text-zinc-500 text-right">
-                          {msg.timestamp}
-                        </span>
                       </div>
                       {isUser && (
                         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-zinc-300 mt-0.5">
