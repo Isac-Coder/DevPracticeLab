@@ -39,8 +39,6 @@ export default function AiChatbot() {
   const pathname = usePathname();
   const { user } = useAuth();
 
-  if (!user) return null;
-
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [inputMessage, setInputMessage] = useState("");
@@ -71,6 +69,15 @@ export default function AiChatbot() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<"gemini" | "ollama">("gemini");
   const [currentModelName, setCurrentModelName] = useState<string>("gemini-3.7-flash");
+
+  // Actualizar el nombre del modelo inmediatamente al cambiar el proveedor para evitar confusión visual
+  useEffect(() => {
+    if (selectedProvider === "ollama") {
+      setCurrentModelName("llama3");
+    } else {
+      setCurrentModelName("gemini-3.7-flash");
+    }
+  }, [selectedProvider]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -149,6 +156,8 @@ export default function AiChatbot() {
       inputRef.current?.focus();
     }
   }, [messages, isOpen, isMinimized]);
+
+  if (!user) return null;
 
   const handleSendMessage = async (textToSend?: string) => {
     const messageContent = (textToSend || inputMessage).trim();
@@ -414,7 +423,13 @@ export default function AiChatbot() {
                     </span>
                   )}
                   <span className="text-zinc-600">•</span>
-                  <span className="font-mono text-[9px] text-zinc-400 truncate max-w-28">{currentModelName}</span>
+                  <span className="flex items-center gap-1">
+                    <span className={`w-1.5 h-1.5 rounded-full ${selectedProvider === 'gemini' ? 'bg-amber-400' : 'bg-sky-400'}`}></span>
+                    <span className="font-mono text-[9px] text-zinc-400 truncate max-w-32">
+                      {selectedProvider === 'gemini' ? 'Gemini: ' : 'Ollama: '}
+                      {currentModelName}
+                    </span>
+                  </span>
                 </div>
               </div>
             </div>
