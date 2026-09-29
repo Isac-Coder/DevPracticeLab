@@ -53,14 +53,11 @@ export default function AccountPage() {
   const [selectedModuleSlugs, setSelectedModuleSlugs] = useState<string[]>([]);
   const [modulesSaving, setModulesSaving] = useState(false);
 
-  // AI Providers State (Gemini & Ollama)
-  const [activeTabAi, setActiveTabAi] = useState<"gemini" | "ollama">("gemini");
-  const [activeProvider, setActiveProvider] = useState<"gemini" | "ollama">("gemini");
+  // AI Provider State (Gemini)
+  const [activeTabAi, setActiveTabAi] = useState<"gemini">("gemini");
+  const [activeProvider, setActiveProvider] = useState<"gemini">("gemini");
   const [geminiApiKey, setGeminiApiKey] = useState("");
   const [geminiModel, setGeminiModel] = useState("gemini-3.7-flash");
-  const [ollamaBaseUrl, setOllamaBaseUrl] = useState("http://localhost:11434");
-  const [ollamaModel, setOllamaModel] = useState("llama3");
-  const [ollamaApiKey, setOllamaApiKey] = useState("");
   const [aiSaving, setAiSaving] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
@@ -129,12 +126,6 @@ export default function AccountPage() {
             if (geminiConf.model) setGeminiModel(geminiConf.model);
           }
 
-          const ollamaConf = data.configs.find((c: any) => c.provider === "ollama");
-          if (ollamaConf) {
-            if (ollamaConf.baseUrl) setOllamaBaseUrl(ollamaConf.baseUrl);
-            if (ollamaConf.model) setOllamaModel(ollamaConf.model);
-            if (ollamaConf.apiKey) setOllamaApiKey(ollamaConf.apiKey);
-          }
         }
         if (data.activeProvider) {
           setActiveProvider(data.activeProvider);
@@ -269,7 +260,7 @@ export default function AccountPage() {
     }
   };
 
-  const switchActiveProvider = async (newProvider: "gemini" | "ollama") => {
+  const switchActiveProvider = async (newProvider: "gemini") => {
     if (!user) return;
     try {
       const res = await fetch("/api/ai-keys", {
@@ -279,7 +270,7 @@ export default function AccountPage() {
       });
       if (res.ok) {
         setActiveProvider(newProvider);
-        setSuccessMsg(`Proveedor activo para el asistente: ${newProvider === "gemini" ? "Google Gemini" : "Ollama"}`);
+        setSuccessMsg(`Proveedor activo para el asistente: Google Gemini`);
         setTimeout(() => setSuccessMsg(""), 4000);
       }
     } catch (e) {
@@ -652,10 +643,10 @@ export default function AccountPage() {
                 <div className="flex items-center justify-between gap-3 mb-4">
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
                     <Bot className="h-5 w-5 text-emerald-400" />
-                    Asistentes de IA (Gemini & Ollama)
+                    Asistente de IA (Gemini)
                   </h3>
                   <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-300">
-                    Activo: {activeProvider === "gemini" ? "Google Gemini" : "Ollama"}
+                    Activo: Google Gemini
                   </span>
                 </div>
                 <p className="text-xs text-zinc-400 mb-6">
@@ -686,21 +677,6 @@ export default function AccountPage() {
                     <Sparkles className="h-4 w-4 text-amber-400" />
                     <span>Google Gemini</span>
                     {activeProvider === "gemini" && (
-                      <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTabAi("ollama")}
-                    className={`flex-1 flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-semibold transition ${
-                      activeTabAi === "ollama"
-                        ? "bg-sky-500/20 text-sky-300 border border-sky-500/30 shadow-sm"
-                        : "text-zinc-400 hover:text-white"
-                    }`}
-                  >
-                    <Server className="h-4 w-4 text-sky-400" />
-                    <span>Ollama (Local / Remoto)</span>
-                    {activeProvider === "ollama" && (
                       <span className="h-2 w-2 rounded-full bg-emerald-400"></span>
                     )}
                   </button>
@@ -768,89 +744,6 @@ export default function AccountPage() {
                           type="button"
                           onClick={() => switchActiveProvider("gemini")}
                           className="px-4 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-200 text-xs font-semibold hover:bg-amber-500/20 transition cursor-pointer"
-                        >
-                          Activar
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Ollama Form */}
-                {activeTabAi === "ollama" && (
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-zinc-300">
-                        URL Base de Ollama
-                      </label>
-                      <input
-                        type="text"
-                        value={ollamaBaseUrl}
-                        onChange={(e) => setOllamaBaseUrl(e.target.value)}
-                        placeholder="http://localhost:11434"
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 px-4 text-xs text-white placeholder-zinc-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500 transition font-mono"
-                      />
-                      <p className="text-[11px] text-zinc-500">
-                        Por defecto es <code>http://localhost:11434</code> para Ollama local.
-                      </p>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-zinc-300">
-                        Modelo de Ollama
-                      </label>
-                      <input
-                        type="text"
-                        value={ollamaModel}
-                        onChange={(e) => setOllamaModel(e.target.value)}
-                        placeholder="llama3, mistral, deepseek-r1..."
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 px-3 text-xs text-white focus:border-sky-500 focus:outline-none transition font-mono"
-                      />
-                      <div className="flex flex-wrap gap-1.5 pt-1.5">
-                        {["deepseek-r1", "qwen2.5-coder", "llama3.3", "llama3.1", "mistral"].map((m) => (
-                          <button
-                            key={m}
-                            type="button"
-                            onClick={() => setOllamaModel(m)}
-                            className={`px-2.5 py-1 rounded-md text-xs font-mono transition border ${
-                              ollamaModel === m
-                                ? "border-sky-400 bg-sky-500/20 text-sky-200"
-                                : "border-zinc-700 bg-zinc-800/50 text-zinc-400 hover:text-zinc-200"
-                            }`}
-                          >
-                            {m}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-medium text-zinc-300">
-                        API Key / Bearer Token (Opcional)
-                      </label>
-                      <input
-                        type="password"
-                        value={ollamaApiKey}
-                        onChange={(e) => setOllamaApiKey(e.target.value)}
-                        placeholder="Opcional si Ollama está protegido por token"
-                        className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 px-3 text-xs text-white focus:border-sky-500 focus:outline-none transition font-mono"
-                      />
-                    </div>
-
-                    <div className="flex gap-3 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => saveAiConfig("ollama", true)}
-                        disabled={aiSaving}
-                        className="flex-1 flex items-center justify-center gap-2 rounded-xl bg-sky-500 py-3 text-xs font-bold text-zinc-950 transition hover:bg-sky-400 disabled:opacity-50 cursor-pointer shadow-md shadow-sky-500/10"
-                      >
-                        {aiSaving ? "Guardando..." : "Guardar y Activar Ollama"}
-                      </button>
-                      {activeProvider !== "ollama" && (
-                        <button
-                          type="button"
-                          onClick={() => switchActiveProvider("ollama")}
-                          className="px-4 rounded-xl border border-sky-500/30 bg-sky-500/10 text-sky-200 text-xs font-semibold hover:bg-sky-500/20 transition cursor-pointer"
                         >
                           Activar
                         </button>

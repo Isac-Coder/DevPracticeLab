@@ -678,8 +678,8 @@ export async function getUserAiConfigs(userId: number | string): Promise<UserApi
         user_id: r.user_id,
         provider: r.provider || "gemini",
         api_key: r.api_key || "",
-        base_url: r.base_url || (r.provider === "ollama" ? "http://localhost:11434" : ""),
-        model: r.model || (r.provider === "ollama" ? "llama3" : "gemini-3.7-flash"),
+        base_url: r.base_url || "",
+        model: r.model || "gemini-3.7-flash",
         is_active: Boolean(r.is_active),
         updated_at: r.updated_at,
       }));

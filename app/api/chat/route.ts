@@ -23,14 +23,12 @@ export async function POST(req: NextRequest) {
     if (session?.userId) {
       try {
         const configs = await getUserAiConfigs(session.userId);
-        const selectedConfig = providerOverride
-          ? configs.find((c) => c.provider === providerOverride)
-          : (configs.find((c) => c.is_active) || configs[0]);
+        const selectedConfig = configs.find((c) => c.is_active) || configs[0];
 
         if (selectedConfig) {
           provider = selectedConfig.provider || "gemini";
           apiKey = selectedConfig.api_key || "";
-          baseUrl = selectedConfig.base_url || (selectedConfig.provider === "ollama" ? "http://localhost:11434" : "");
+          baseUrl = selectedConfig.base_url || "";
           model = selectedConfig.model || "";
         }
       } catch (dbErr) {
@@ -61,81 +59,6 @@ Reglas estrictas para tus respuestas:
 4. Explica qué hace el código y por qué es una buena práctica.
 5. Responde siempre en español.
 6. Si no estás seguro de la respuesta o no tienes información suficiente, admite que no lo sabes en lugar de inventar información.`;
-
-    // ==========================================
-    // EJECUCIÓN CON OLLAMA
-    // ==========================================
-    if (provider === "ollama") {
-      const ollamaUrl = (baseUrl || "http://localhost:11434").replace(/\/+$/, "");
-      const selectedModel = model || "llama3";
-
-      const ollamaMessages = [
-        { role: "system", content: systemPrompt },
-        ...messages.slice(-10).map((m: { role: string; content: string }) => ({
-          role: m.role === "assistant" ? "assistant" : "user",
-          content: m.content,
-        })),
-      ];
-
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 120000);
-
-      try {
-        const headers: Record<string, string> = {
-          "Content-Type": "application/json",
-        };
-        if (apiKey) {
-          headers["Authorization"] = `Bearer ${apiKey}`;
-        }
-
-        const res = await fetch(`${ollamaUrl}/api/chat`, {
-          method: "POST",
-          headers,
-          signal: controller.signal,
-          body: JSON.stringify({
-            model: selectedModel,
-            messages: ollamaMessages,
-            stream: false,
-          }),
-        });
-
-        clearTimeout(timeoutId);
-
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error("Error respuesta Ollama:", res.status, errText);
-          const localReply = generateLocalExpertResponse(messages, moduleContext);
-          return NextResponse.json({
-            reply: localReply,
-            provider: "ollama-local",
-            model: selectedModel,
-            needsKey: false,
-          });
-        }
-
-        const data = await res.json();
-        const replyText = data?.message?.content || "No se recibió respuesta de Ollama.";
-
-        return NextResponse.json({
-          reply: replyText,
-          provider: "ollama",
-          model: selectedModel,
-          needsKey: false,
-        });
-      } catch (ollamaErr: any) {
-        clearTimeout(timeoutId);
-        console.error("Error al conectar con Ollama (servidor no activo):", ollamaErr);
-        
-        // Fallback automático a motor experto in-process (sin necesidad de iniciar servidor)
-        const localReply = generateLocalExpertResponse(messages, moduleContext);
-        return NextResponse.json({
-          reply: localReply,
-          provider: "ollama-local",
-          model: selectedModel,
-          needsKey: false,
-        });
-      }
-    }
 
     // ==========================================
     // EJECUCIÓN CON GEMINI

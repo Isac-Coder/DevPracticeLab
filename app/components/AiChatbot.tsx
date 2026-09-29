@@ -67,17 +67,7 @@ export default function AiChatbot() {
   });
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [selectedProvider, setSelectedProvider] = useState<"gemini" | "ollama">("gemini");
   const [currentModelName, setCurrentModelName] = useState<string>("gemini-3.7-flash");
-
-  // Actualizar el nombre del modelo inmediatamente al cambiar el proveedor para evitar confusión visual
-  useEffect(() => {
-    if (selectedProvider === "ollama") {
-      setCurrentModelName("llama3");
-    } else {
-      setCurrentModelName("gemini-3.7-flash");
-    }
-  }, [selectedProvider]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -105,16 +95,12 @@ export default function AiChatbot() {
     }
   }, [messages, chatStorageKey]);
 
-  // Obtener proveedor activo de la base de datos al abrir
   useEffect(() => {
     const fetchActiveProvider = async () => {
       try {
         const res = await fetch("/api/ai-keys");
         if (res.ok) {
           const data = await res.json();
-          if (data.activeProvider) {
-            setSelectedProvider(data.activeProvider);
-          }
           if (data.configs) {
             const activeConf = data.configs.find((c: any) => c.isActive) || data.configs[0];
             if (activeConf?.model) {
@@ -192,7 +178,6 @@ export default function AiChatbot() {
                 content: m.content,
               })),
               moduleContext: currentModule,
-              providerOverride: selectedProvider,
             }),
           });
 
@@ -219,9 +204,6 @@ export default function AiChatbot() {
       }
 
       const data = await res.json();
-      if (data.provider) {
-        setSelectedProvider(data.provider);
-      }
       if (data.model) {
         setCurrentModelName(data.model);
       }
@@ -403,18 +385,10 @@ export default function AiChatbot() {
               <div>
                 <div className="flex items-center gap-1.5">
                   <h3 className="text-xs font-bold text-white tracking-wide">DevPracticeBot</h3>
-                  <button
-                    onClick={() => setSelectedProvider(selectedProvider === "gemini" ? "ollama" : "gemini")}
-                    className={`rounded-full border px-2 py-0.2 text-[9px] font-semibold transition cursor-pointer flex items-center gap-1 ${
-                      selectedProvider === "gemini"
-                        ? "border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
-                        : "border-sky-500/30 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20"
-                    }`}
-                    title="Clic para alternar entre Gemini y Ollama"
-                  >
-                    <span>{selectedProvider === "gemini" ? "Gemini" : "Ollama"}</span>
-                    <span className="text-[8px] opacity-70">⇄</span>
-                  </button>
+                  <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.2 text-[9px] font-semibold transition cursor-pointer flex items-center gap-1 text-amber-300">
+                    Gemini
+                    <span className="text-[8px] opacity-70">✨</span>
+                  </span>
                 </div>
                 <div className="flex items-center gap-2 text-[10px] text-zinc-400">
                   {currentModule && (
@@ -424,10 +398,9 @@ export default function AiChatbot() {
                   )}
                   <span className="text-zinc-600">•</span>
                   <span className="flex items-center gap-1">
-                    <span className={`w-1.5 h-1.5 rounded-full ${selectedProvider === 'gemini' ? 'bg-amber-400' : 'bg-sky-400'}`}></span>
+                    <span className={`w-1.5 h-1.5 rounded-full bg-amber-400`}></span>
                     <span className="font-mono text-[9px] text-zinc-400 truncate max-w-32">
-                      {selectedProvider === 'gemini' ? 'Gemini: ' : 'Ollama: '}
-                      {currentModelName}
+                      Gemini: {currentModelName}
                     </span>
                   </span>
                 </div>
@@ -477,33 +450,21 @@ export default function AiChatbot() {
                           <Bot className="h-3.5 w-3.5" />
                         </div>
                       )}
-                      <div className="flex flex-col items-end gap-1">
-                        <div
-                          className={`max-w-[85%] rounded-2xl p-3.5 ${
-                            isUser
-                              ? "border border-emerald-500/30 bg-emerald-500/15 text-white shadow-sm"
-                              : "border border-white/10 bg-white/[0.04] text-zinc-200"
-                          }`}
-                        >
-                          {isUser ? (
-                            <p className="text-xs leading-relaxed whitespace-pre-wrap">{msg.content}</p>
-                          ) : (
-                            renderFormattedMessage(msg.content, msg.id)
-                          )}
-                          <span className="mt-1.5 block text-[9px] text-zinc-500 text-right">
-                            {msg.timestamp}
-                          </span>
-                        </div>
-                        {isUser && (
-                          <button
-                            onClick={() => handleSendMessage(msg.content)}
-                            disabled={loading}
-                            className="flex items-center gap-1 px-1.5 py-0.5 text-[9px] text-zinc-500 hover:text-emerald-300 transition cursor-pointer font-medium opacity-60 hover:opacity-100"
-                          >
-                            <Sparkles className="h-2.5 w-2.5" />
-                            <span>Repetir</span>
-                          </button>
+                      <div
+                        className={`max-w-[85%] rounded-2xl p-3.5 ${
+                          isUser
+                            ? "border border-emerald-500/30 bg-emerald-500/15 text-white shadow-sm"
+                            : "border border-white/10 bg-white/[0.04] text-zinc-200"
+                        }`}
+                      >
+                        {isUser ? (
+                          <p className="text-xs leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                        ) : (
+                          renderFormattedMessage(msg.content, msg.id)
                         )}
+                        <span className="mt-1.5 block text-[9px] text-zinc-500 text-right">
+                          {msg.timestamp}
+                        </span>
                       </div>
                       {isUser && (
                         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-zinc-300 mt-0.5">

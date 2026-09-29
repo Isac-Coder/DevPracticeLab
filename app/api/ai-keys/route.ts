@@ -14,8 +14,8 @@ export async function GET() {
     const configs = configsRaw.map((row) => ({
       provider: row.provider || "gemini",
       apiKey: row.api_key || "",
-      baseUrl: row.base_url || (row.provider === "ollama" ? "http://localhost:11434" : ""),
-      model: row.model || (row.provider === "ollama" ? "llama3" : "gemini-3.7-flash"),
+      baseUrl: row.base_url || "",
+      model: row.model || "gemini-3.7-flash",
       isActive: Boolean(row.is_active),
       updatedAt: row.updated_at,
     }));
@@ -45,9 +45,9 @@ export async function POST(req: NextRequest) {
 
     const { provider = "gemini", apiKey = "", baseUrl = "", model = "", isActive = false } = await req.json();
 
-    if (!["gemini", "ollama"].includes(provider)) {
+    if (!["gemini"].includes(provider)) {
       return NextResponse.json(
-        { error: "Proveedor no soportado. Usa 'gemini' o 'ollama'." },
+        { error: "Proveedor no soportado. Usa 'gemini'." },
         { status: 400 }
       );
     }
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({
-      message: `Configuración para ${provider === "gemini" ? "Google Gemini" : "Ollama"} guardada correctamente.`,
+      message: `Configuración para Google Gemini guardada correctamente.`,
       config: savedRecord,
       provider,
       isActive,
@@ -85,7 +85,7 @@ export async function PUT(req: NextRequest) {
 
     const { activeProvider } = await req.json();
 
-    if (!["gemini", "ollama"].includes(activeProvider)) {
+    if (!["gemini"].includes(activeProvider)) {
       return NextResponse.json(
         { error: "Proveedor no válido." },
         { status: 400 }

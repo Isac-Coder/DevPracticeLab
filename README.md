@@ -34,7 +34,7 @@ Construido con [Next.js](https://nextjs.org) 16.3.6, [React](https://react.dev) 
 
 - **Asistente de IA Integrado (DevPracticeBot)** (`/components/AiChatbot.tsx`)
   - Chat técnico especializado en SSH, Docker, PostgreSQL, TypeScript y Next.js.
-  - Soporte multi-proveedor: Cambio dinámico entre Gemini y Ollama.
+  - Soporte de IA: Integración avanzada con Google Gemini para asistencia técnica.
   - Memoria de conversación persistente mediante `localStorage` por usuario.
   - Sistema de resiliencia: Mecanismo de reintento automático (hasta 3 intentos) ante errores de API.
   - Sincronización en tiempo real: Refresco automático de configuraciones de IA cada 30 segundos.
