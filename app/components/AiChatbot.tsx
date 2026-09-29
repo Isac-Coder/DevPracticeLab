@@ -482,7 +482,7 @@ export default function AiChatbot() {
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.2s]"></span>
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.4s]"></span>
                     </div>
-                    <span className="text-[11px]">Consultando a {selectedProvider === "gemini" ? "Gemini" : "Ollama"}...</span>
+                    <span className="text-[11px]">Consultando a Gemini...</span>
                   </div>
                 )}
                 <div ref={messagesEndRef} />

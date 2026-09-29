@@ -175,7 +175,7 @@ export default function AccountPage() {
     }
   };
 
-  const saveAiConfig = async (provider: "gemini" | "ollama", setAsActive = true) => {
+  const saveAiConfig = async (provider: "gemini", setAsActive = true) => {
     if (!user) return;
     setAiSaving(true);
     setAiError("");
@@ -202,34 +202,12 @@ export default function AccountPage() {
             throw new Error(errMsg || "La prueba de conexión con Gemini falló. Verifica tu API Key y el modelo seleccionado.");
           }
         }
-      } else {
-        if (!ollamaBaseUrl.trim()) {
-          throw new Error("Por favor ingresa la URL Base de Ollama.");
-        }
-        const pingUrl = `${ollamaBaseUrl.trim().replace(/\/$/, '')}/api/tags`;
-        const testRes = await fetch(pingUrl, {
-          method: "GET",
-          headers: ollamaApiKey ? { "Authorization": `Bearer ${ollamaApiKey}` } : {}
-        }).catch(() => null);
-
-        if (!testRes || !testRes.ok) {
-          isHighDemand = true;
-          console.warn("Ollama connection test failed, allowing save anyway.");
-        }
       }
 
-      const payload = provider === "gemini"
-        ? {
+      const payload = {
             provider: "gemini",
             apiKey: geminiApiKey,
             model: geminiModel,
-            isActive: setAsActive,
-          }
-        : {
-            provider: "ollama",
-            baseUrl: ollamaBaseUrl,
-            model: ollamaModel,
-            apiKey: ollamaApiKey,
             isActive: setAsActive,
           };
 
@@ -250,7 +228,7 @@ export default function AccountPage() {
 
       const successMsgText = isHighDemand
         ? "⚠️ La API de Gemini reportó alta demanda temporal, pero tu API Key se ha guardado y activado correctamente en la base de datos."
-        : `¡Prueba de conexión exitosa! Configuración de ${provider === "gemini" ? "Google Gemini" : "Ollama"} guardada en la base de datos.`;
+        : `¡Prueba de conexión exitosa! Configuración de Google Gemini guardada en la base de datos.`;
       setAiSuccess(successMsgText);
       setTimeout(() => setAiSuccess(""), 5000);
     } catch (error) {
