@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import {
-  MessageSquare,
   Sparkles,
   X,
   Send,
@@ -14,8 +13,6 @@ import {
   User,
   Copy,
   Check,
-  ExternalLink,
-  ChevronDown,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
@@ -27,6 +24,13 @@ interface Message {
   timestamp: string;
 }
 
+// Define the interface for AI configurations
+interface AiConfig {
+  model: string;
+  isActive: boolean;
+  // Assuming other properties might exist but are not directly used or known
+}
+
 const QUICK_PROMPTS = [
   { label: "🐳 Docker Compose", text: "¿Cómo crear un archivo docker-compose.yml para una base de datos PostgreSQL y Node.js?" },
   { label: "🛡️ Claves SSH", text: "¿Cómo generar una clave SSH segura con Ed25519 y subirla al servidor?" },
@@ -34,6 +38,11 @@ const QUICK_PROMPTS = [
   { label: "⚡ Next.js Server Components", text: "¿Cuál es la diferencia entre Server Components y Client Components en Next.js?" },
   { label: "📊 PostgreSQL JSONB", text: "¿Cómo indexar y consultar una columna JSONB en PostgreSQL?" },
 ];
+
+// Function to generate a unique ID
+const generateUniqueId = () => {
+  return `id-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+};
 
 export default function AiChatbot() {
   const pathname = usePathname();
@@ -47,15 +56,28 @@ export default function AiChatbot() {
   const chatStorageKey = user ? `devpracticelab_chat_${user.email}` : "devpracticelab_chat_guest";
 
   const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === "undefined") {
+      // Return default welcome message if not in a browser environment
+      return [
+        {
+          id: "welcome",
+          role: "assistant",
+          content: "¡Hola! 👋 Soy tu asistente técnico de **DevPracticeLab**. ¿Tienes alguna duda sobre **SSH**, **Docker**, **PostgreSQL**, **TypeScript** o **Next.js**?",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        },
+      ];
+    }
     try {
-      const saved = typeof window !== "undefined" ? localStorage.getItem(chatStorageKey) : null;
+      const saved = localStorage.getItem(chatStorageKey);
       if (saved) {
-        const parsed = JSON.parse(saved);
+        const parsed = JSON.parse(saved); // Corrected typo
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch {
-      // no-op
+    } catch (e) {
+      console.error("Failed to load messages from localStorage:", e);
+      // Fallback to default welcome message if localStorage data is invalid
     }
+    // Default welcome message if no valid saved messages are found
     return [
       {
         id: "welcome",
@@ -72,21 +94,6 @@ export default function AiChatbot() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
-  // Sincronizar mensajes con localStorage ante cambios o cambio de usuario
-  useEffect(() => {
-    try {
-      const saved = localStorage.getItem(chatStorageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed);
-        }
-      }
-    } catch {
-      // no-op
-    }
-  }, [chatStorageKey]);
-
   useEffect(() => {
     try {
       localStorage.setItem(chatStorageKey, JSON.stringify(messages));
@@ -102,7 +109,7 @@ export default function AiChatbot() {
         if (res.ok) {
           const data = await res.json();
           if (data.configs) {
-            const activeConf = data.configs.find((c: any) => c.isActive) || data.configs[0];
+            const activeConf = data.configs.find((c: AiConfig) => c.isActive) || data.configs[0];
             if (activeConf?.model) {
               setCurrentModelName(activeConf.model);
             }
@@ -149,7 +156,7 @@ export default function AiChatbot() {
     if (!messageContent || loading) return;
 
     const userMessage: Message = {
-      id: `msg-${Date.now()}`,
+      id: generateUniqueId(),
       role: "user",
       content: messageContent,
       timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -208,18 +215,18 @@ export default function AiChatbot() {
       }
 
       const botMessage: Message = {
-        id: `msg-bot-${Date.now()}`,
+        id: generateUniqueId(),
         role: "assistant",
         content: data.reply || "No pude procesar la consulta en este momento.",
         timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       };
 
       setMessages((prev) => [...prev, botMessage]);
-    } catch (err) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
-          id: `msg-err-${Date.now()}`,
+          id: generateUniqueId(),
           role: "assistant",
           content: "⚠️ Hubo un error de conexión persistente al consultar el asistente. Intenta de nuevo más tarde.",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
@@ -302,7 +309,7 @@ export default function AiChatbot() {
                 key={index}
                 className="my-2 overflow-hidden rounded-xl border border-white/10 bg-[#070d14] font-mono text-[11px]"
               >
-                <div className="flex items-center justify-between border-b border-white/8 bg-white/[0.02] px-3 py-1.5 text-[10px] text-zinc-400">
+                <div className="flex items-center justify-between border-b border-white/8 bg-white/2 px-3 py-1.5 text-[10px] text-zinc-400">
                   <span className="uppercase tracking-wider font-semibold text-emerald-400/90">{part.lang}</span>
                   <button
                     onClick={() => copyCode(part.code || "", blockId)}
@@ -350,7 +357,7 @@ export default function AiChatbot() {
                     {isBullet && <span className="text-emerald-400 select-none">•</span>}
                     <span
                       dangerouslySetInnerHTML={{ __html: formattedLine }}
-                      className="break-words"
+                      className="wrap-break-word"
                     />
                   </div>
                 );
@@ -367,12 +374,12 @@ export default function AiChatbot() {
       {/* Ventana del Chatbot */}
       {isOpen && (
         <div
-          className={`mb-3 w-[94vw] max-w-[480px] rounded-3xl border border-white/15 bg-[#091017]/95 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_rgba(16,185,129,0.12)] transition-all duration-200 flex flex-col overflow-hidden ${
-            isMinimized ? "h-14" : "h-[640px] max-h-[88vh]"
+          className={`mb-3 w-[94vw] max-w-120 rounded-3xl border border-white/15 bg-[#091017]/95 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_rgba(16,185,129,0.12)] transition-all duration-200 flex flex-col overflow-hidden ${
+            isMinimized ? "h-14" : "h-160 max-h-[88vh]"
           }`}
         >
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-white/10 bg-white/[0.03] px-4 py-3 select-none">
+          <div className="flex items-center justify-between border-b border-white/10 bg-white/3 px-4 py-3 select-none">
             <div className="flex items-center gap-2.5">
               <div className="relative flex h-8 w-8 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
                 <Sparkles className="h-4 w-4" />
@@ -453,7 +460,7 @@ export default function AiChatbot() {
                         className={`max-w-[85%] rounded-2xl p-3.5 ${
                           isUser
                             ? "border border-emerald-500/30 bg-emerald-500/15 text-white shadow-sm"
-                            : "border border-white/10 bg-white/[0.04] text-zinc-200"
+                            : "border border-white/10 bg-white/4 text-zinc-200"
                         }`}
                       >
                         {isUser ? (
@@ -496,7 +503,7 @@ export default function AiChatbot() {
                       <button
                         key={idx}
                         onClick={() => handleSendMessage(prompt.text)}
-                        className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-[10px] text-zinc-300 hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-200 transition cursor-pointer"
+                        className="rounded-full border border-white/10 bg-white/3 px-2.5 py-1 text-[10px] text-zinc-300 hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-200 transition cursor-pointer"
                       >
                         {prompt.label}
                       </button>
@@ -506,7 +513,7 @@ export default function AiChatbot() {
               )}
 
               {/* Input Footer */}
-              <div className="border-t border-white/10 bg-white/[0.02] p-3">
+              <div className="border-t border-white/10 bg-white/2 p-3">
                 <div className="relative flex items-center">
                   <textarea
                     ref={inputRef}

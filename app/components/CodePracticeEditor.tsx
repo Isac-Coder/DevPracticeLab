@@ -62,6 +62,7 @@ export default function CodePracticeEditor({
         esModuleInterop: true,
         skipLibCheck: true,
         resolveJsonModule: true,
+        moduleResolution: ts.ModuleResolutionKind.Node10,
       },
       reportDiagnostics: true,
       fileName,
