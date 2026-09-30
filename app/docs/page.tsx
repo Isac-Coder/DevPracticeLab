@@ -24,14 +24,13 @@ import {
 import Navbar from "@/app/components/Navbar";
 import type { LiveDocResponse } from "@/app/api/docs/route";
 
-type DocSection = "ssh" | "docker" | "postgres" | "typescript" | "nextjs";
+type DocSection = "ssh" | "docker" | "postgres" | "typescript";
 
 const MODULE_TABS = [
   { id: "ssh" as DocSection, title: "SSH", icon: Server, color: "text-green-400", border: "border-green-500/30" },
   { id: "docker" as DocSection, title: "Docker", icon: Container, color: "text-sky-400", border: "border-sky-500/30" },
   { id: "postgres" as DocSection, title: "PostgreSQL", icon: Database, color: "text-indigo-400", border: "border-indigo-500/30" },
   { id: "typescript" as DocSection, title: "TypeScript", icon: Code2, color: "text-blue-400", border: "border-blue-500/30" },
-  { id: "nextjs" as DocSection, title: "Next.js", icon: Rocket, color: "text-sky-300", border: "border-sky-400/30" },
 ];
 
 export default function DocsPage() {
@@ -77,7 +76,7 @@ export default function DocsPage() {
   const currentTabInfo = MODULE_TABS.find((t) => t.id === activeTab)!;
   const Icon = currentTabInfo.icon;
 
-  const isConceptualModule = activeTab === "typescript" || activeTab === "nextjs";
+  const isConceptualModule = activeTab === "typescript";
 
   const filteredCommands = docData?.content.officialCommands.filter(
     (c) => {
@@ -192,20 +191,20 @@ export default function DocsPage() {
                 placeholder={isConceptualModule ? `Buscar conceptos o temas en ${currentTabInfo.title}...` : `Buscar comandos o conceptos en ${currentTabInfo.title}...`}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full rounded-full border border-white/10 bg-white/[0.03] py-2.5 pl-10 pr-4 text-xs sm:text-sm text-white placeholder-zinc-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-emerald-400/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition"
+                className="w-full rounded-full border border-white/10 bg-white/3 py-2.5 pl-10 pr-4 text-xs sm:text-sm text-white placeholder-zinc-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-emerald-400/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition"
               />
             </div>
           </div>
 
           {loading ? (
-            <div className="flex min-h-[300px] flex-col items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8 text-center backdrop-blur-md">
+              <div className="flex min-h-75 flex-col items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8 text-center backdrop-blur-md">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-700 border-t-emerald-500" />
               <p className="mt-4 text-xs text-zinc-400">Descargando documentación en vivo desde la web oficial...</p>
             </div>
           ) : docData ? (
             <>
               {/* Module Main Overview Card */}
-              <div className="rounded-[28px] border border-white/10 bg-white/[0.02] p-6 sm:p-8 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_24px_60px_rgba(2,6,23,0.7)]">
+              <div className="rounded-3xl border border-white/10 bg-white/2 p-6 sm:p-8 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.02),0_24px_60px_rgba(2,6,23,0.7)]">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-white/10">
                   <div className="flex items-center gap-4">
                     <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-emerald-400/20 bg-emerald-500/5">
@@ -214,7 +213,7 @@ export default function DocsPage() {
                     <div>
                       <div className="mb-1 flex flex-wrap items-center gap-2">
                         <h2 className="text-2xl font-bold text-white">{docData.content.title}</h2>
-                        <span className="rounded-full border border-white/10 bg-white/[0.04] px-2.5 py-0.5 text-[11px] font-mono text-zinc-300">
+                        <span className="rounded-full border border-white/10 bg-white/4 px-2.5 py-0.5 text-[11px] font-mono text-zinc-300">
                           {docData.version}
                         </span>
                       </div>
@@ -230,7 +229,7 @@ export default function DocsPage() {
                       href={docData.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-zinc-200 transition hover:border-white/20 hover:bg-white/[0.05]"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/3 px-3 py-2 text-xs text-zinc-200 transition hover:border-white/20 hover:bg-white/5"
                     >
                       <span>Web oficial</span>
                       <ExternalLink className="h-3 w-3" />
@@ -267,139 +266,41 @@ export default function DocsPage() {
                 </div>
               </div>
 
-              {/* Official Commands Section */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2 text-lg font-bold text-white">
-                    <Layers className="h-5 w-5 text-emerald-400" />
-                    <h3>{isConceptualModule ? "Conceptos clave y referencias oficiales" : "Comandos Oficiales & Sintaxis"}</h3>
+              <div className="space-y-4 font-serif text-zinc-900 bg-white p-8 rounded-lg shadow-sm border border-zinc-200">
+                <div className="flex items-center justify-between border-b border-zinc-300 pb-4 mb-6">
+                  <div className="flex items-center gap-4 text-3xl font-bold text-zinc-950">
+                    <Layers className="h-8 w-8 text-sky-700" />
+                    <h3>{docData.content.title}</h3>
                   </div>
-                  <span className="text-xs text-zinc-400">
-                    {searchQuery.trim()
-                      ? `${(filteredCommands?.length || 0) + (docData?.webResults?.length || 0)} ${(filteredCommands?.length || 0) + (docData?.webResults?.length || 0) === 1 ? "resultado encontrado" : "resultados encontrados"}`
-                      : `${filteredCommands?.length || 0} referencias listadas`}
-                  </span>
                 </div>
 
-                <div className="rounded-[24px] border border-white/10 bg-white/[0.02] overflow-hidden shadow-[0_16px_40px_rgba(2,6,23,0.5)]">
-                  <div className="divide-y divide-white/8">
-                    {hasLocalResults && filteredCommands ? (
-                      filteredCommands.map((cmd, idx) => (
-                        <div
-                          key={`cmd-${idx}`}
-                          className="p-4 sm:p-5 transition hover:bg-white/[0.02]"
-                        >
-                          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                            <div className="flex items-center gap-3 min-w-[160px]">
-                              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-emerald-500/8 px-2.5 py-1.5 text-[11px] font-bold font-mono text-emerald-200">
-                                {cmd.name}
-                              </span>
-                            </div>
+                <div className="bg-zinc-50 p-6 rounded-lg border-l-4 border-sky-600 mb-8">
+                  <p className="text-sm text-zinc-700 leading-relaxed italic">
+                    {docData.content.summary}
+                  </p>
+                </div>
 
-                            <div className="flex-1 rounded-2xl border border-white/8 bg-[#0c1319]/80 p-3 sm:p-4">
-                              <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-                                <div className="space-y-2">
-                                  <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-300 font-bold">
-                                    Para qué sirve
-                                  </p>
-                                  <p className="text-xs text-zinc-300 leading-relaxed">{cmd.description}</p>
-                                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  {docData.content.topics.map((topic, idx) => (
+                    <div key={idx} className="space-y-3">
+                      <h4 className="text-xl font-semibold text-zinc-900 border-b border-zinc-200 pb-2">{topic.title}</h4>
+                      <p className="text-sm text-zinc-700 leading-relaxed">{topic.body}</p>
+                      {topic.codeSample && (
+                        <pre className="bg-zinc-900 text-zinc-100 p-4 rounded-md text-xs overflow-x-auto">
+                          <code>{topic.codeSample}</code>
+                        </pre>
+                      )}
+                    </div>
+                  ))}
+                </div>
 
-                                <div className="space-y-2">
-                                  <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-400 font-bold">
-                                    Cómo se usa
-                                  </p>
-
-                                  <div className="flex items-center gap-2 rounded-xl border border-white/8 bg-zinc-950/90 px-2.5 py-2 text-[11px] font-mono text-zinc-200 overflow-x-auto">
-                                    {!isConceptualModule && <span className="text-zinc-500 select-none">$</span>}
-                                    <span className="truncate">{cmd.syntax || "Se usa según el contexto del módulo."}</span>
-                                    <button
-                                      onClick={() => copyToClipboard(cmd.syntax || "")}
-                                      className="ml-2 shrink-0 text-zinc-400 hover:text-white transition cursor-pointer"
-                                      title={isConceptualModule ? "Copiar ejemplo" : "Copiar sintaxis"}
-                                    >
-                                      {copiedCode === cmd.syntax ? (
-                                        <Check className="h-3.5 w-3.5 text-green-400" />
-                                      ) : (
-                                        <Copy className="h-3.5 w-3.5" />
-                                      )}
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    ) : null}
-
-                    {hasExternalResults && docData?.webResults ? (
-                      docData.webResults.map((result, idx) => (
-                        <div
-                          key={`web-${idx}`}
-                          className="p-4 sm:p-5 transition hover:bg-amber-500/[0.02] bg-amber-500/[0.01]"
-                        >
-                          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
-                            <div className="flex flex-col gap-2 min-w-[160px]">
-                              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold text-amber-200">
-                                <Globe className="h-3 w-3 text-amber-400" />
-                                {result.title}
-                              </span>
-                              <span className="text-[9px] uppercase tracking-[0.14em] text-amber-400/80 font-semibold px-1">
-                                Documentación oficial
-                              </span>
-                            </div>
-
-                            <div className="flex-1 rounded-2xl border border-amber-500/20 bg-[#0c1319]/90 p-3 sm:p-4">
-                              <div className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-                                <div className="space-y-2">
-                                  <p className="text-[10px] uppercase tracking-[0.18em] text-amber-300 font-bold">
-                                    Información oficial
-                                  </p>
-                                  <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-line">
-                                    {result.summary}
-                                  </p>
-                                </div>
-
-                                <div className="space-y-2">
-                                  <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-400 font-bold">
-                                    Referencia Web
-                                  </p>
-                                  {result.url ? (
-                                    <a
-                                      href={result.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center gap-2 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs font-medium text-amber-200 transition hover:bg-amber-500/15"
-                                    >
-                                      <span>Ver en sitio oficial</span>
-                                      <ExternalLink className="h-3.5 w-3.5" />
-                                    </a>
-                                  ) : (
-                                    <span className="text-xs text-zinc-500 italic">Fuente oficial en vivo</span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      ))
-                    ) : null}
-
-                    {!hasLocalResults && !hasExternalResults ? (
-                      <div className="p-8 text-center text-xs text-zinc-400">
-                        <Search className="h-6 w-6 mx-auto mb-2 text-zinc-600" />
-                        <p className="font-semibold text-zinc-300">
-                          {searchQuery.trim()
-                            ? `No se encontraron referencias para "${searchQuery}"`
-                            : "No hay referencias disponibles para este módulo"}
-                        </p>
-                        <p className="text-zinc-500 mt-1">
-                          Prueba buscando con palabras clave como comandos, conceptos o sintaxis.
-                        </p>
-                      </div>
-                    ) : null}
-                  </div>
+                <div className="mt-12 pt-8 border-t border-zinc-300">
+                    <h4 className="text-lg font-semibold text-zinc-900 mb-4">Referencias externas</h4>
+                    <ul className="list-disc pl-5 space-y-2 text-sm text-sky-800">
+                        {docData.content.quickLinks.map((link, idx) => (
+                            <li key={idx}><a href={link.url} target="_blank" rel="noopener noreferrer" className="hover:underline">{link.title}</a></li>
+                        ))}
+                    </ul>
                 </div>
               </div>
 
@@ -414,7 +315,7 @@ export default function DocsPage() {
                   {filteredTopics?.map((topic, idx) => (
                     <div
                       key={idx}
-                      className="rounded-[24px] border border-white/10 bg-white/[0.02] p-6 flex flex-col justify-between backdrop-blur-md shadow-[0_12px_30px_rgba(2,6,23,0.5)]"
+                      className="rounded-3xl border border-white/10 bg-white/2 p-6 flex flex-col justify-between backdrop-blur-md shadow-[0_12px_30px_rgba(2,6,23,0.5)]"
                     >
                       <div className="space-y-3 mb-4">
                         <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/15 bg-emerald-500/6 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-200">

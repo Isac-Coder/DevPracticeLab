@@ -126,7 +126,6 @@ export default function AiChatbot() {
     if (pathname.includes("/docker")) return "Docker";
     if (pathname.includes("/postgres")) return "PostgreSQL";
     if (pathname.includes("/typescript")) return "TypeScript";
-    if (pathname.includes("/nextjs")) return "Next.js";
     if (pathname.includes("/challenges")) return "Retos técnicos";
     if (pathname.includes("/docs")) return "Documentación";
     return undefined;

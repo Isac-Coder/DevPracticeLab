@@ -56,7 +56,7 @@ export default function ChallengesPage() {
   const PAGE_SIZE = 6;
 
   const getUnlockedWeekForModule = (moduleName: string) => {
-    const targetModules = moduleName === "all" ? ["ssh", "docker", "postgres", "typescript", "nextjs"] : [moduleName];
+    const targetModules = moduleName === "all" ? ["ssh", "docker", "postgres", "typescript"] : [moduleName];
 
     let unlockedWeek = 1;
 
@@ -271,8 +271,6 @@ export default function ChallengesPage() {
         return <Database className="h-4 w-4 text-indigo-400" />;
       case "typescript":
         return <Code2 className="h-4 w-4 text-blue-400" />;
-      case "nextjs":
-        return <Rocket className="h-4 w-4 text-sky-400" />;
       default:
         return <Target className="h-4 w-4 text-emerald-400" />;
     }
@@ -466,7 +464,6 @@ export default function ChallengesPage() {
                 <option value="docker">Docker (50)</option>
                 <option value="postgres">PostgreSQL (50)</option>
                 <option value="typescript">TypeScript (50)</option>
-                <option value="nextjs">Next.js (50)</option>
               </select>
 
               {/* Difficulty Filter */}

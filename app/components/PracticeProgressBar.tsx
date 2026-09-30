@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { Server, Container, Database, Code2, TrendingUp, CheckCircle, Flame, Award, Rocket } from "lucide-react";
+import { Server, Container, Database, Code2, TrendingUp, CheckCircle, Flame, Award } from "lucide-react";
 import { usePracticeProgress, ModuleType } from "@/lib/ProgressContext";
 
 interface ModuleProgressBarProps {
@@ -49,15 +49,6 @@ export function ModuleProgressBar({ module, showDetails = true }: ModuleProgress
       accent: "text-cyan-300",
       badge: "bg-blue-500/10 border-blue-500/20 text-blue-400",
       icon: Code2,
-    },
-    nextjs: {
-      bar: "bg-linear-to-r from-sky-500 to-cyan-400",
-      bg: "bg-sky-950/40",
-      border: "border-sky-900/40",
-      text: "text-sky-400",
-      accent: "text-cyan-300",
-      badge: "bg-sky-500/10 border-sky-500/20 text-sky-400",
-      icon: Rocket,
     },
   }[module];
 
@@ -121,7 +112,6 @@ export function OverallProgressDashboard() {
   const dockerStats = getModuleStats("docker");
   const postgresStats = getModuleStats("postgres");
   const tsStats = getModuleStats("typescript");
-  const nextJsStats = getModuleStats("nextjs");
 
   return (
     <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 backdrop-blur-md shadow-xl">
@@ -157,7 +147,7 @@ export function OverallProgressDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {/* SSH Progress Bar */}
         <div className="rounded-xl border border-green-900/30 bg-green-950/20 p-4">
           <div className="flex items-center justify-between mb-2">
@@ -239,27 +229,6 @@ export function OverallProgressDashboard() {
           <div className="mt-2.5 flex justify-between text-[11px] text-zinc-400">
             <span>{tsStats.commandsExecuted} ejecuciones</span>
             <span>{tsStats.completedTargets.length}/{tsStats.totalGoal} objetivos</span>
-          </div>
-        </div>
-
-        {/* Next.js Progress Bar */}
-        <div className="rounded-xl border border-sky-900/30 bg-sky-950/20 p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2 text-sky-400 text-sm font-semibold">
-              <Rocket className="h-4 w-4" />
-              <span>Next.js</span>
-            </div>
-            <span className="text-xs font-bold text-sky-400">{nextJsStats.percentage}%</span>
-          </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-950 border border-zinc-800">
-            <div
-              className="h-full bg-linear-to-r from-sky-500 to-cyan-400 transition-all duration-500"
-              style={{ width: `${Math.max(nextJsStats.percentage, 3)}%` }}
-            />
-          </div>
-          <div className="mt-2.5 flex justify-between text-[11px] text-zinc-400">
-            <span>{nextJsStats.commandsExecuted} ejecuciones</span>
-            <span>{nextJsStats.completedTargets.length}/{nextJsStats.totalGoal} objetivos</span>
           </div>
         </div>
       </div>

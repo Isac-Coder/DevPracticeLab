@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Server, Container, Database, Code2, Terminal, BookOpen, Zap, UserCheck, ArrowRight, ShieldCheck, Activity, Rocket } from "lucide-react";
+import { Server, Container, Database, Code2, Terminal, BookOpen, Zap, UserCheck, ArrowRight, ShieldCheck, Activity } from "lucide-react";
 import PracticeCard from "@/app/components/PracticeCard";
 import Navbar from "@/app/components/Navbar";
 import { OverallProgressDashboard } from "@/app/components/PracticeProgressBar";
@@ -76,11 +76,11 @@ export default function Home() {
               </Link>
               <Link href="/challenges" className="flex items-center gap-2 hover:text-amber-400 transition">
                 <Zap className="h-4 w-4 text-amber-400" />
-                <span>250 Retos Semanales con XP</span>
+                <span>200 Retos Semanales con XP</span>
               </Link>
               <div className="flex items-center gap-2">
                 <Terminal className="h-4 w-4 text-blue-400" />
-                <span>5 módulos de práctica</span>
+                <span>4 módulos de práctica</span>
               </div>
             </div>
           </div>
@@ -108,7 +108,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
             <PracticeCard
               href="/ssh"
               moduleType="ssh"
@@ -170,22 +170,6 @@ export default function Home() {
                 "Validación de errores con tsc",
                 "Tipos, interfaces y enums",
                 "Utility Types (Partial, Pick, Omit)",
-              ]}
-            />
-
-            <PracticeCard
-              href="/nextjs"
-              moduleType="nextjs"
-              title="Next.js"
-              description="Prueba componentes, Layout y app router con compilación para detectar errores en JSX y props."
-              icon={Rocket}
-              gradient="bg-linear-to-br from-sky-500 to-cyan-600"
-              iconColor="text-sky-400"
-              features={[
-                "Editor de código JSX",
-                "Validación de errores de render",
-                "Routing con App Router",
-                "Componentes server/client",
               ]}
             />
           </div>

@@ -1,12 +1,4 @@
-<!-- BEGIN:nextjs-agent-rules -->
 
-# This is NOT the Next.js you know
-
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
-
-This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
-
-<!-- END:nextjs-agent-rules -->
 
 ---
 
@@ -14,7 +6,7 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Descripción
 
-Plataforma educativa de práctica técnica para **SSH**, **Docker**, **PostgreSQL**, **TypeScript** y **Next.js**. La app combina terminales simuladas, retos progresivos, documentación oficial, gestión de progreso y suscripción por módulos dentro de una sola experiencia de aprendizaje.
+Plataforma educativa de práctica técnica para **SSH**, **Docker**, **PostgreSQL** y **TypeScript**. La app combina terminales simuladas, retos progresivos, documentación oficial, gestión de progreso y suscripción por módulos dentro de una sola experiencia de aprendizaje.
 
 ## Stack tecnológico
 
@@ -29,9 +21,8 @@ Plataforma educativa de práctica técnica para **SSH**, **Docker**, **PostgreSQ
 ## Cambios recientes y estado actual
 
 - **Retos mejorados:** validación de respuestas, bloqueo de repetición, selección de semana, paginación de 6 retos por página, límite visual de 5 números de paginación, restricción de semanas futuras y revelación de soluciones después de fallos o éxito.
-- **Banco de retos ampliado:** 50 desafíos por módulo para SSH, Docker, PostgreSQL, TypeScript y Next.js, con rotación semanal y filtro por módulo.
+- **Banco de retos ampliado:** 50 desafíos por módulo para SSH, Docker, PostgreSQL y TypeScript, con rotación semanal y filtro por módulo.
 - **Documentación oficial más útil:** búsqueda por módulo, extracción textual desde páginas oficiales, renderizado de contenido documental real, no URLs en bruto, soporte opcional para Gemini API key y explicación de comandos/conceptos.
-- **Next.js añadido como módulo oficial:** ruta `/nextjs`, documentación, práctica y editor de código.
 - **TypeScript mejorado:** editor de práctica con feedback de compilación real y ejemplos interactivos.
 - **UX móvil ajustada:** menú hamburguesa vertical superpuesto para pantallas pequeñas, sin romper el ancho del contenido.
 - **Diseño visual del docs page refinado:** más legible, menos saturado y más orientado a contenido editorial.
@@ -79,9 +70,6 @@ app/
 │   └── page.tsx
 ├── login/
 │   └── page.tsx
-├── nextjs/
-│   ├── page.tsx
-│   └── commands.ts
 ├── postgres/
 │   ├── commands.ts
 │   └── page.tsx
@@ -139,7 +127,6 @@ scripts/
 | `/docker` | Client Component | Terminal Docker |
 | `/postgres` | Client Component | Terminal PostgreSQL |
 | `/typescript` | Client Component | Editor TypeScript |
-| `/nextjs` | Client Component | Módulo Next.js |
 | `/api/modules/available` | Route Handler | Módulos disponibles para el usuario |
 | `/api/modules/subscribe` | Route Handler | Guardado de suscripciones |
 

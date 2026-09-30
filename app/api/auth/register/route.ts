@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     // 4. Subscribe user to all available modules by default
     await setUserModuleSubscriptions(
       user.id,
-      ["ssh", "docker", "postgres", "typescript", "nextjs"]
+      ["ssh", "docker", "postgres", "typescript"]
     );
 
     // 5. Generate JWT Token

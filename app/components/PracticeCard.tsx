@@ -31,7 +31,7 @@ export default function PracticeCard({
   const { getModuleStats } = usePracticeProgress();
 
   const modKey = moduleType || (href.replace("/", "") as ModuleType);
-  const stats = modKey && ["ssh", "docker", "postgres", "typescript", "nextjs"].includes(modKey)
+  const stats = modKey && ["ssh", "docker", "postgres", "typescript"].includes(modKey)
     ? getModuleStats(modKey)
     : null;
 

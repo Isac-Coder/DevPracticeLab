@@ -40,11 +40,7 @@ const SOURCES: Record<string, { name: string; url: string; rawUrl?: string }> = 
     url: "https://www.typescriptlang.org/docs/",
     rawUrl: "https://raw.githubusercontent.com/microsoft/TypeScript/main/README.md",
   },
-  nextjs: {
-    name: "Next.js Official Documentation",
-    url: "https://nextjs.org/docs",
-    rawUrl: "https://raw.githubusercontent.com/vercel/next.js/canary/README.md",
-  },
+
 };
 
 type DocBundle = {
@@ -92,11 +88,6 @@ const OFFICIAL_DOCS_BY_MODULE: Record<string, string[]> = {
     "https://www.typescriptlang.org/docs/",
     "https://www.typescriptlang.org/docs/handbook/",
     "https://www.typescriptlang.org/docs/handbook/utility-types.html",
-  ],
-  nextjs: [
-    "https://nextjs.org/docs",
-    "https://nextjs.org/docs/app",
-    "https://nextjs.org/docs/learning/fundamentals/getting-started",
   ],
 };
 
@@ -191,62 +182,10 @@ const extractRelevantScrapedSection = (rawText: string, queryTerms: string) => {
   return compactSummary(finalSelection.join("\n\n"));
 };
 
-const searchWebForCommand = async (moduleParam: string, query: string, apiKey?: string, userId?: number | string) => {
-  let finalApiKey = apiKey?.trim();
-
-  if (!finalApiKey && userId) {
-    try {
-      const pool = getPool();
-      const result = await pool.query("SELECT api_key FROM user_api_keys WHERE user_id = $1", [userId]);
-      if (result.rows.length > 0) {
-        finalApiKey = result.rows[0].api_key;
-      }
-    } catch (e) {
-      console.error("Error fetching API key from DB in searchWebForCommand:", e);
-    }
-  }
-
+const searchWebForCommand = async (moduleParam: string, query: string) => {
   const moduleKey = moduleParam in OFFICIAL_DOCS_BY_MODULE ? moduleParam : "ssh";
   const officialDocs = OFFICIAL_DOCS_BY_MODULE[moduleKey];
   const queryTerms = (query || "documentation").trim();
-
-  if (finalApiKey?.trim()) {
-    try {
-      const prompt = `Busca contenido documental oficial y relevante sobre "${queryTerms}" para ${moduleKey}. Devuelve SOLO JSON válido con esta estructura: {"results":[{"title":"...","summary":"..."}]} y máximo 3 resultados. Debe ser contenido documental, no enlaces ni anuncios. No agregues texto extra.`;
-
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.7-flash:generateContent?key=${encodeURIComponent(finalApiKey.trim())}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const text = data?.candidates?.[0]?.content?.parts
-          ?.map((part: { text?: string }) => part.text ?? "")
-          .join("") || "";
-
-        const cleanText = text.replace(/```json|```/gi, "").trim();
-        const parsed = JSON.parse(cleanText);
-        const results = Array.isArray(parsed?.results) ? parsed.results : [];
-
-        const normalized = results
-          .filter((item: any) => item?.summary)
-          .slice(0, 3)
-          .map((item: any) => ({
-            title: String(item.title || `${moduleKey.toUpperCase()} documentation`).trim(),
-            url: "",
-            summary: String(item.summary).trim(),
-          }));
-
-        if (normalized.length > 0) return normalized;
-      }
-    } catch {
-      // continue to official docs fallback
-    }
-  }
 
   const results: { title: string; url: string; summary: string }[] = [];
   const seen = new Set<string>();
@@ -331,7 +270,7 @@ const isQueryRelevant = (title: string, summary: string, query: string) => {
 const buildDocsFromOfficialSource = (moduleParam: string, html: string): DocBundle => {
   const text = stripHtml(html);
   const normalized = text.toLowerCase();
-  const normalizedModule = (moduleParam === "docker" || moduleParam === "postgres" || moduleParam === "typescript" || moduleParam === "nextjs" || moduleParam === "ssh")
+  const normalizedModule = (moduleParam === "docker" || moduleParam === "postgres" || moduleParam === "typescript" || moduleParam === "ssh")
     ? moduleParam
     : "ssh";
 
@@ -397,19 +336,6 @@ const buildDocsFromOfficialSource = (moduleParam: string, html: string): DocBund
       { name: "Keyof & Typeof", syntax: "type UserKey = keyof User;\ntype State = typeof initialState;", description: "Extrae las propiedades de un tipo o infiere el tipo exacto a partir de una variable JS." },
       { name: "Strict Mode & TSConfig", syntax: "{\n  \"compilerOptions\": {\n    \"strict\": true,\n    \"noImplicitAny\": true\n  }\n}", description: "Activa el modo estricto para evitar nullish runtime errors y variables sin tipo." },
     ],
-    nextjs: [
-      { name: "App Router Structure", syntax: "app/layout.tsx + app/page.tsx + app/loading.tsx", description: "Organización de rutas y layouts mediante el sistema de carpetas de Next.js." },
-      { name: "Server Components (RSC)", syntax: "export default async function Page() {\n  const data = await getData();\n  return <div>{data.title}</div>;\n}", description: "Componentes renderizados en el servidor por defecto para máxima velocidad y seguridad." },
-      { name: "Client Components", syntax: "'use client';\nimport { useState } from 'react';", description: "Directiva para habilitar estado de React, hooks del navegador y eventos interactivos." },
-      { name: "Server Actions", syntax: "'use server';\nexport async function updateProfile(formData: FormData) {\n  await db.update(...);\n}", description: "Funciones asíncronas seguras que mutan datos en el servidor sin crear endpoints manuales." },
-      { name: "Route Handlers", syntax: "export async function GET(req: NextRequest) {\n  return NextResponse.json({ ok: true });\n}", description: "Define endpoints HTTP (GET, POST, PUT, DELETE) en rutas como `app/api/.../route.ts`." },
-      { name: "Dynamic Routes & Params", syntax: "// app/posts/[slug]/page.tsx\nexport default async function Post({ params }: { params: Promise<{ slug: string }> })", description: "Genera páginas dinámicas que capturan variables en la URL." },
-      { name: "Layouts & Templates", syntax: "export default function Layout({ children }: { children: React.ReactNode }) {\n  return <main>{children}</main>;\n}", description: "Estructuras de UI compartidas entre múltiples rutas preservando el estado." },
-      { name: "Metadata API & SEO", syntax: "export const metadata = {\n  title: 'Documentación',\n  description: 'Guías y referencias',\n};", description: "Configuración de metadatos estáticos o dinámicos para indexación y SEO." },
-      { name: "next/link & Navigation", syntax: "import Link from 'next/link';\n<Link href=\"/docs\">Documentación</Link>", description: "Navegación del lado del cliente ultra fluida con prefetching inteligente de rutas." },
-      { name: "Middleware", syntax: "export function middleware(req: NextRequest) {\n  // Auth y redirecciones\n}", description: "Intercepción y procesamiento de peticiones antes de que se complete el renderizado." },
-      { name: "Revalidation (ISR)", syntax: "revalidatePath('/docs');\nrevalidateTag('productos');", description: "Invalida la caché de páginas o datos bajo demanda sin reconstruir la app." },
-    ],
   };
 
   const officialCommands = commandTemplates[normalizedModule] || commandTemplates.ssh;
@@ -435,7 +361,6 @@ const buildDocsFromOfficialSource = (moduleParam: string, html: string): DocBund
     docker: "Docker CLI & Container Engine Documentation",
     postgres: "PostgreSQL SQL Manual & Performance Guide",
     typescript: "TypeScript Language Guide & Type System Reference",
-    nextjs: "Next.js App Router & Full-Stack Guide",
   }[normalizedModule] ?? "OpenSSH Protocol & Remote Administration Reference";
 
   const resolvedSummary = {
@@ -443,7 +368,6 @@ const buildDocsFromOfficialSource = (moduleParam: string, html: string): DocBund
     docker: "Documentación sincronizada para Docker Engine, BuildKit, Docker Compose v2 y gestión de microservicios.",
     postgres: "Referencia técnica del motor relacional PostgreSQL, índices y transacciones ACID.",
     typescript: "Guía central de TypeScript: tipos, interfaces, utility types, patrones de diseño y validación estática del código.",
-    nextjs: "Referencia oficial de Next.js centrada en App Router, layouts, rendering, rutas, SEO y componentes server/client.",
   }[normalizedModule] ?? "Documentación oficial del módulo.";
 
   return {
@@ -462,7 +386,6 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const moduleParam = searchParams.get("module")?.toLowerCase() || "ssh";
   const searchQuery = searchParams.get("search")?.trim() || "";
-  const apiKey = searchParams.get("apiKey")?.trim() || "";
 
   const sourceConfig = SOURCES[moduleParam] || SOURCES.ssh;
 
@@ -493,7 +416,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const fallback: Record<"ssh" | "docker" | "postgres" | "typescript" | "nextjs", DocBundle> = {
+  const fallback: Record<"ssh" | "docker" | "postgres" | "typescript", DocBundle> = {
     ssh: {
       title: "OpenSSH Protocol & Remote Administration Reference",
       summary: "Manual y directrices de seguridad para conexiones remotas cifradas, autenticación mediante claves criptográficas Ed25519 y túneles de red.",
@@ -590,43 +513,16 @@ export async function GET(req: NextRequest) {
         },
       ],
     },
-    nextjs: {
-      title: "Next.js App Router & Full-Stack Guide",
-      summary: "Documentación oficial de Next.js centrada en App Router, layouts, server actions, rutas API y gestión del rendering.",
-      quickLinks: [
-        { title: "Next.js Docs", url: "https://nextjs.org/docs" },
-        { title: "App Router", url: "https://nextjs.org/docs/app" },
-        { title: "Learn Next.js", url: "https://nextjs.org/learn" },
-      ],
-      officialCommands: [
-        { name: "App Router", syntax: "app/page.tsx + app/layout.tsx", description: "Modelo de rutas basado en carpetas que reemplaza la estructura Pages Router para aplicaciones modernas." },
-        { name: "Server Components", syntax: "export default async function Page()", description: "Los componentes se renderizan del lado del servidor por defecto para mejorar rendimiento y seguridad." },
-        { name: "Client Components", syntax: "'use client';", description: "Permite usar estado, eventos y hooks del navegador cuando la interactividad es necesaria." },
-        { name: "Route Handlers", syntax: "app/api/hello/route.ts", description: "Define endpoints para crear APIs REST dentro del mismo proyecto Next.js." },
-      ],
-      topics: [
-        {
-          title: "Layouts y rutas",
-          body: "Usa layouts para compartir estructura visual entre páginas y mantener consistencia global en la UI y navegación.",
-          codeSample: "export default function RootLayout({ children }) {\n  return (\n    <html lang=\"es\">\n      <body>{children}</body>\n    </html>\n  );\n}",
-        },
-        {
-          title: "Server Components y SEO",
-          body: "Los Server Components optimizan la carga inicial y permiten renderizar contenido con mejor soporte para SEO y datos dinámicos.",
-          codeSample: "export const metadata = { title: 'Dashboard', description: 'Panel principal' };\n\nexport default async function Page() {\n  return <h1>Hola mundo</h1>;\n}",
-        },
-      ],
-    },
   };
 
   const session = await getSession();
   const userId = session?.userId;
 
   if (searchQuery) {
-    webResults = await searchWebForCommand(moduleParam, searchQuery, apiKey || undefined, userId);
+    webResults = await searchWebForCommand(moduleParam, searchQuery);
   }
 
-  const fallbackKey = (moduleParam === "docker" || moduleParam === "postgres" || moduleParam === "typescript" || moduleParam === "nextjs" || moduleParam === "ssh")
+  const fallbackKey = (moduleParam === "docker" || moduleParam === "postgres" || moduleParam === "typescript" || moduleParam === "ssh")
     ? moduleParam
     : "ssh";
   const sourceData: DocBundle = remoteText ? buildDocsFromOfficialSource(moduleParam, remoteText) : fallback[fallbackKey];
@@ -672,22 +568,6 @@ export async function GET(req: NextRequest) {
       lastUpdated: new Date().toISOString(),
       isOnline,
       version: "TypeScript v5.7+ Strict Edition",
-      webResults,
-      content: {
-        title: sourceData.title,
-        summary: sourceData.summary,
-        quickLinks: sourceData.quickLinks,
-        officialCommands: sourceData.officialCommands,
-        topics: sourceData.topics,
-      },
-    };
-  } else if (moduleParam === "nextjs") {
-    liveData = {
-      source: sourceConfig.name,
-      sourceUrl: sourceConfig.url,
-      lastUpdated: new Date().toISOString(),
-      isOnline,
-      version: "Next.js 15.x / App Router",
       webResults,
       content: {
         title: sourceData.title,

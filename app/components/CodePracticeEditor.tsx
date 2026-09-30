@@ -10,7 +10,7 @@ interface CodePracticeEditorProps {
   accent: string;
   fileName: string;
   initialCode: string;
-  moduleKey: "typescript" | "nextjs";
+  moduleKey: "typescript";
   onRun?: (command: string) => void;
 }
 
@@ -56,7 +56,7 @@ export default function CodePracticeEditor({
       compilerOptions: {
         target: ts.ScriptTarget.ES2020,
         module: ts.ModuleKind.ESNext,
-        jsx: moduleKey === "nextjs" ? ts.JsxEmit.ReactJSX : ts.JsxEmit.React,
+        jsx: ts.JsxEmit.React,
         strict: true,
         noEmit: true,
         esModuleInterop: true,

@@ -82,7 +82,6 @@ if (!global.__mockAvailableModules) {
     { id: 2, slug: "docker", name: "Docker", description: "Contenedores, imágenes y orquestación", is_active: true, created_at: new Date() },
     { id: 3, slug: "postgres", name: "PostgreSQL", description: "Consultas SQL y manejo de datos", is_active: true, created_at: new Date() },
     { id: 4, slug: "typescript", name: "TypeScript", description: "Tipos, interfaces y seguridad de código", is_active: true, created_at: new Date() },
-    { id: 5, slug: "nextjs", name: "Next.js", description: "App Router y desarrollo frontend moderno", is_active: true, created_at: new Date() },
   ];
 }
 if (!global.__mockUserSubscriptions) global.__mockUserSubscriptions = [];
@@ -273,8 +272,7 @@ export async function initDatabase() {
         ('ssh', 'SSH', 'Acceso remoto y administración de servidores', TRUE),
         ('docker', 'Docker', 'Contenedores, imágenes y orquestación', TRUE),
         ('postgres', 'PostgreSQL', 'Consultas SQL y manejo de datos', TRUE),
-        ('typescript', 'TypeScript', 'Tipos, interfaces y seguridad de código', TRUE),
-        ('nextjs', 'Next.js', 'App Router y desarrollo frontend moderno', TRUE)
+        ('typescript', 'TypeScript', 'Tipos, interfaces y seguridad de código', TRUE)
       ON CONFLICT (slug) DO NOTHING;
     `);
 

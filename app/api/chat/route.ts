@@ -156,8 +156,7 @@ function generateLocalExpertResponse(messages: Array<{ role: string; content: st
     lastMsg.includes("ssh") || lastMsg.includes("túnel") || lastMsg.includes("llave") || lastMsg.includes("puerto") ? "ssh" :
     lastMsg.includes("docker") || lastMsg.includes("container") || lastMsg.includes("imagen") || lastMsg.includes("compose") ? "docker" :
     lastMsg.includes("postgres") || lastMsg.includes("sql") || lastMsg.includes("tabla") || lastMsg.includes("base de datos") || lastMsg.includes("query") ? "postgres" :
-    lastMsg.includes("typescript") || lastMsg.includes("tipo") || lastMsg.includes("interface") || lastMsg.includes("generic") ? "typescript" :
-    lastMsg.includes("next") || lastMsg.includes("app router") || lastMsg.includes("server component") || lastMsg.includes("route handler") ? "nextjs" : "general"
+    lastMsg.includes("typescript") || lastMsg.includes("tipo") || lastMsg.includes("interface") || lastMsg.includes("generic") ? "typescript" : "general"
   );
 
   let reply = "";
@@ -238,50 +237,10 @@ WITH estadisticas AS (
 SELECT * FROM estadisticas WHERE total > 5;
 \`\`\``;
   } else if (topic === "typescript" || lastMsg.includes("typescript") || lastMsg.includes("tipo")) {
-    reply = `### Guía Rápida de TypeScript (Motor Local Sin Servidor)
-
-TypeScript añade tipado estático robusto sobre JavaScript:
-
-1. **Interfaces y Genéricos:**
-\`\`\`typescript
-interface ApiResponse<T> {
-  success: boolean;
-  data: T;
-  error?: string;
-}
-
-function processResponse<T>(response: ApiResponse<T>): T {
-  if (!response.success) {
-    throw new Error(response.error || "Error desconocido");
-  }
-  return response.data;
-}
-\`\`\`
-
-2. **Utility Types útiles:**
-- \`Partial<T>\`: Vuelve todas las propiedades opcionales.
-- \`Pick<T, K>\`: Selecciona un subconjunto de propiedades.
-- \`Omit<T, K>\`: Excluye propiedades específicas.`;
-  } else if (topic === "nextjs" || lastMsg.includes("next")) {
-    reply = `### Guía Rápida de Next.js App Router (Motor Local Sin Servidor)
-
-Next.js con App Router ofrece renderizado híbrido y alto rendimiento:
-
-1. **Server Component vs Client Component:**
-Por defecto, los componentes en \`app/\` son Server Components. Añade \`"use client"\` al inicio del archivo sólo cuando necesites interactividad (\`useState\`, \`useEffect\`).
-
-2. **Route Handler (\`app/api/ejemplo/route.ts\`):**
-\`\`\`typescript
-import { NextResponse } from 'next/server';
-
-export async function GET(request: Request) {
-  return NextResponse.json({ message: "Hola desde API Route de Next.js" });
-}
-\`\`\``;
   } else {
     reply = `### DevPracticeBot (Motor In-Process Activo - Sin Servidor)
 
-¡Hola! Estoy listo para ayudarte con **SSH**, **Docker**, **PostgreSQL**, **TypeScript** y **Next.js**. 
+¡Hola! Estoy listo para ayudarte con **SSH**, **Docker**, **PostgreSQL** y **TypeScript**. 
 
 Como nuestro motor local in-process está activo, puedes hacer cualquier consulta técnica de forma instantánea sin necesidad de iniciar ningún servidor externo (como Ollama) ni configurar claves. ¿Sobre qué tema te gustaría consultar?`;
   }

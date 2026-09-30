@@ -27,7 +27,6 @@ const navItems = [
   { href: "/docker", label: "Docker", icon: Container },
   { href: "/postgres", label: "PostgreSQL", icon: Database },
   { href: "/typescript", label: "TypeScript", icon: Code2 },
-  { href: "/nextjs", label: "Next.js", icon: Code2 },
   { href: "/docs", label: "Docs", icon: BookOpen },
   { href: "/challenges", label: "Retos", icon: Trophy },
 ];

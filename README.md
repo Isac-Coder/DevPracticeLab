@@ -1,6 +1,6 @@
 # 🧠 DevPracticeLab
 
-Plataforma educativa práctica para entrenar **SSH**, **Docker**, **PostgreSQL**, **TypeScript** y **Next.js** con rutas de aprendizaje, retos semanales, documentación oficial y ejercitación real de código.
+Plataforma educativa práctica para entrenar **SSH**, **Docker**, **PostgreSQL** y **TypeScript** con rutas de aprendizaje, retos semanales, documentación oficial y ejercitación real de código.
 
 Construido con [Next.js](https://nextjs.org) 16.3.6, [React](https://react.dev) 19, [Tailwind CSS](https://tailwindcss.com) 4, [Lucide React](https://lucide.dev) y PostgreSQL con Supabase.
 
@@ -9,7 +9,7 @@ Construido con [Next.js](https://nextjs.org) 16.3.6, [React](https://react.dev) 
 ## ✨ Características principales
 
 - **Retos semanales con regla de progresión y bloqueo** (`/challenges`)
-  - Banco ampliado a 50 retos por módulo, con 5 módulos activos: SSH, Docker, PostgreSQL, TypeScript y Next.js.
+  - Banco ampliado a 50 retos por módulo, con 4 módulos activos: SSH, Docker, PostgreSQL y TypeScript.
   - Validación de respuestas con feedback inmediato.
   - Bloqueo de retos repetidos tras fallo o finalización correcta.
   - Restricción por semanas: no se permite pasar a la siguiente si la anterior no está completada.
@@ -28,12 +28,8 @@ Construido con [Next.js](https://nextjs.org) 16.3.6, [React](https://react.dev) 
   - Feedback de compilación real.
   - Ejemplos interactivos con validación del resultado.
 
-- **Módulo oficial de Next.js** (`/nextjs`)
-  - Sección dedicada a App Router, layouts, rendering, rutas, metadata y estructuras propias de Next.js.
-  - Integrado con el flujo de progreso del usuario y el editor de práctica.
-
 - **Asistente de IA Integrado (DevPracticeBot)** (`/components/AiChatbot.tsx`)
-  - Chat técnico especializado en SSH, Docker, PostgreSQL, TypeScript y Next.js.
+  - Chat técnico especializado en SSH, Docker, PostgreSQL y TypeScript.
   - Soporte de IA: Integración avanzada con Google Gemini para asistencia técnica.
   - Memoria de conversación persistente mediante `localStorage` por usuario.
   - Sistema de resiliencia: Mecanismo de reintento automático (hasta 3 intentos) ante errores de API.
@@ -57,7 +53,6 @@ Construido con [Next.js](https://nextjs.org) 16.3.6, [React](https://react.dev) 
   - Docker: contenedores, redes, volúmenes, compose.
   - PostgreSQL: consultas SQL, gestión de datos.
   - TypeScript: compilación y validación.
-  - Next.js: conceptos del framework, routing y renderizado.
 
 - **UX mejorada y responsive**
   - Menú hamburguesa vertical superpuesto en móvil.
@@ -104,9 +99,6 @@ app/
 │   └── page.tsx
 ├── login/
 │   └── page.tsx
-├── nextjs/
-│   ├── page.tsx
-│   └── commands.ts
 ├── postgres/
 │   ├── commands.ts
 │   └── page.tsx
@@ -146,7 +138,6 @@ scripts/
 | `/docker` | Práctica Docker |
 | `/postgres` | Práctica PostgreSQL |
 | `/typescript` | Editor y práctica TypeScript |
-| `/nextjs` | Módulo de práctica Next.js |
 | `/login` | Inicio de sesión |
 | `/register` | Registro |
 | `/api/modules/available` | Módulos disponibles y suscritos del usuario |

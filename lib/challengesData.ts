@@ -1,6 +1,6 @@
 export interface Challenge {
   id: string;
-  module: "ssh" | "docker" | "postgres" | "typescript" | "nextjs";
+  module: "ssh" | "docker" | "postgres" | "typescript";
   week: number;
   title: string;
   difficulty: "Fácil" | "Intermedio" | "Avanzado";
@@ -281,81 +281,11 @@ const typescriptChallenges: Challenge[] = Array.from({ length: 50 }, (_, i) => {
   }
 });
 
-// 50 Retos para Next.js
-const nextjsChallenges: Challenge[] = Array.from({ length: 50 }, (_, i) => {
-  const week = i + 1;
-  const concepts = [
-    "App Router y rutas",
-    "Server Components",
-    "Client Components",
-    "Metadata y SEO",
-    "Loading, Error y layouts",
-  ];
-  const concept = concepts[i % concepts.length];
-
-  if (week <= 15) {
-    return {
-      id: `nextjs-w${week}`,
-      module: "nextjs",
-      week,
-      title: `Semana ${week} - Reto Next.js: ${concept} básico`,
-      difficulty: "Fácil" as const,
-      xp: 160 + week * 5,
-      objective: `Crea una ruta de App Router con un layout básico y un componente que renderice texto estático junto a un enlace a otra página.`,
-      hints: [
-        "Usa 'app/page.tsx' como página raíz y 'next/link' para navegar.",
-        "Los layouts se definen en 'app/layout.tsx'.",
-        "La ruta '/about' puede vivir en 'app/about/page.tsx'.",
-      ],
-      expectedKeywords: ["app", "layout", "page", "next/link", "export default"],
-      solution: `app/layout.tsx\nexport default function RootLayout({ children }) {\n  return <html><body>{children}</body></html>;\n}\n\napp/page.tsx\nimport Link from 'next/link';\nexport default function Page() {\n  return <Link href="/about">Ir a About</Link>;\n}`,
-      tags: ["app-router", "layout", "routing", "next/link"],
-    };
-  } else if (week <= 35) {
-    return {
-      id: `nextjs-w${week}`,
-      module: "nextjs",
-      week,
-      title: `Semana ${week} - Reto Next.js: ${concept} con interactividad`,
-      difficulty: "Intermedio" as const,
-      xp: 250 + week * 5,
-      objective: `Implementa un componente client-side con estado local, un botón para actualizar texto y un formulario controlado que envie datos al servidor.`,
-      hints: [
-        "Usa 'use client' al principio del archivo para habilitar interactividad.",
-        "El estado se gestiona con 'useState'.",
-        "Un formulario controlado usa 'onChange' y 'value'.",
-      ],
-      expectedKeywords: ["use client", "useState", "onClick", "form", "event"],
-      solution: `"use client";\nimport { useState } from 'react';\nexport default function Counter() {\n  const [count, setCount] = useState(0);\n  return <button onClick={() => setCount(count + 1)}>{count}</button>;\n}`,
-      tags: ["client-components", "state", "interactive-ui", "forms"],
-    };
-  } else {
-    return {
-      id: `nextjs-w${week}`,
-      module: "nextjs",
-      week,
-      title: `Semana ${week} - Reto Next.js: ${concept} avanzado`,
-      difficulty: "Avanzado" as const,
-      xp: 360 + week * 5,
-      objective: `Configura metadata SEO, un loading state y una página con datos renderizados desde un fetch asíncrono o un segmento con cache/prefetch controlado.`,
-      hints: [
-        "Metadata puede ir dentro de 'export const metadata = {}' en la página.",
-        "Puedes crear 'loading.tsx' para mostrar un estado mientras carga.",
-        "Los fetches en server components pueden usar 'cache: 'no-store'' o 'revalidate'.",
-      ],
-      expectedKeywords: ["metadata", "loading", "fetch", "cache", "revalidate"],
-      solution: `export const metadata = { title: 'Dashboard', description: 'Panel principal' };\nexport default async function Page() {\n  const data = await fetch('https://api.example.com', { cache: 'no-store' });\n  return <pre>{JSON.stringify(await data.json())}</pre>;\n}`,
-      tags: ["seo", "metadata", "loading", "server-data", "cache"],
-    };
-  }
-});
-
 export const ALL_CHALLENGES: Challenge[] = [
   ...sshChallenges,
   ...dockerChallenges,
   ...postgresChallenges,
   ...typescriptChallenges,
-  ...nextjsChallenges,
 ];
 
 export function getCurrentCalendarWeek(): number {

@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { useAuth } from "./AuthContext";
 
-export type ModuleType = "ssh" | "docker" | "postgres" | "typescript" | "nextjs";
+export type ModuleType = "ssh" | "docker" | "postgres" | "typescript";
 
 export interface ModuleProgress {
   commandsExecuted: number;
@@ -16,7 +16,6 @@ export interface ProgressState {
   docker: ModuleProgress;
   postgres: ModuleProgress;
   typescript: ModuleProgress;
-  nextjs: ModuleProgress;
 }
 
 const MODULE_TARGETS: Record<ModuleType, { name: string; targetCommands: string[]; totalGoal: number }> = {
@@ -40,11 +39,6 @@ const MODULE_TARGETS: Record<ModuleType, { name: string; targetCommands: string[
     targetCommands: ["tsc", "ts-node", "type", "interface", "enum", "generics", "strict", "eval", "build", "check"],
     totalGoal: 10,
   },
-  nextjs: {
-    name: "Next.js",
-    targetCommands: ["next", "app", "layout", "page", "route", "use client", "server", "render", "build", "lint"],
-    totalGoal: 10,
-  },
 };
 
 const initialProgress: ProgressState = {
@@ -52,7 +46,6 @@ const initialProgress: ProgressState = {
   docker: { commandsExecuted: 0, uniqueCommands: [], lastPracticed: null },
   postgres: { commandsExecuted: 0, uniqueCommands: [], lastPracticed: null },
   typescript: { commandsExecuted: 0, uniqueCommands: [], lastPracticed: null },
-  nextjs: { commandsExecuted: 0, uniqueCommands: [], lastPracticed: null },
 };
 
 interface ProgressContextType {
@@ -108,11 +101,6 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
             commandsExecuted: parsed.typescript?.commandsExecuted || 0,
             uniqueCommands: parsed.typescript?.uniqueCommands || [],
             lastPracticed: parsed.typescript?.lastPracticed || null,
-          },
-          nextjs: {
-            commandsExecuted: parsed.nextjs?.commandsExecuted || 0,
-            uniqueCommands: parsed.nextjs?.uniqueCommands || [],
-            lastPracticed: parsed.nextjs?.lastPracticed || null,
           },
         });
       } else {
@@ -203,18 +191,16 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
   const statsDocker = getModuleStats("docker");
   const statsPostgres = getModuleStats("postgres");
   const statsTypeScript = getModuleStats("typescript");
-  const statsNextJs = getModuleStats("nextjs");
 
   const overallPercentage = Math.round(
-    (statsSSH.percentage + statsDocker.percentage + statsPostgres.percentage + statsTypeScript.percentage + statsNextJs.percentage) / 5
+    (statsSSH.percentage + statsDocker.percentage + statsPostgres.percentage + statsTypeScript.percentage) / 4
   );
 
   const totalCommandsExecuted =
     progress.ssh.commandsExecuted +
     progress.docker.commandsExecuted +
     progress.postgres.commandsExecuted +
-    progress.typescript.commandsExecuted +
-    progress.nextjs.commandsExecuted;
+    progress.typescript.commandsExecuted;
 
   const resetProgress = useCallback(() => {
     saveProgress(initialProgress);
