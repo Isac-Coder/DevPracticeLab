@@ -13,6 +13,9 @@ import {
   User,
   Copy,
   Check,
+  RotateCcw,
+  Pencil,
+  Square,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
@@ -89,10 +92,13 @@ export default function AiChatbot() {
   });
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [currentModelName, setCurrentModelName] = useState<string>("gemini-3.7-flash-lite");
+  const [currentModelName, setCurrentModelName] = useState<string>("gemini-3.5-flash-lite");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const requestControllerRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => requestControllerRef.current?.abort(), []);
 
   useEffect(() => {
     try {
@@ -142,6 +148,25 @@ export default function AiChatbot() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  const waitForRetry = (duration: number, signal: AbortSignal) =>
+    new Promise<void>((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new DOMException("Solicitud cancelada", "AbortError"));
+        return;
+      }
+
+      const timeout = window.setTimeout(() => {
+        signal.removeEventListener("abort", abortWait);
+        resolve();
+      }, duration);
+      const abortWait = () => {
+        window.clearTimeout(timeout);
+        reject(new DOMException("Solicitud cancelada", "AbortError"));
+      };
+
+      signal.addEventListener("abort", abortWait, { once: true });
+    });
+
   useEffect(() => {
     if (isOpen && !isMinimized) {
       scrollToBottom();
@@ -166,6 +191,8 @@ export default function AiChatbot() {
     setMessages(newMessages);
     setInputMessage("");
     setLoading(true);
+    const controller = new AbortController();
+    requestControllerRef.current = controller;
 
     try {
       let attempts = 0;
@@ -178,6 +205,7 @@ export default function AiChatbot() {
           res = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            signal: controller.signal,
             body: JSON.stringify({
               messages: newMessages.map((m) => ({
                 role: m.role,
@@ -194,19 +222,25 @@ export default function AiChatbot() {
             // For other errors, we might still retry in case of transient network issues.
             if (res.status !== 400 && res.status !== 401 && res.status !== 403) {
               console.warn(`Chat API attempt ${attempts} failed with status ${res.status}. Retrying...`);
-              if (attempts < 3) await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+              if (attempts < 3) await waitForRetry(1000 * attempts, controller.signal);
             } else {
               break; // Stop retrying on client errors
             }
           }
         } catch (fetchErr) {
+          if (controller.signal.aborted) throw fetchErr;
           console.error(`Chat API attempt ${attempts} network error:`, fetchErr);
-          if (attempts < 3) await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+          if (attempts < 3) await waitForRetry(1000 * attempts, controller.signal);
         }
       }
 
       if (!res || !res.ok) {
-        throw new Error(res ? `Server responded with ${res.status}` : "Network error after 3 attempts");
+        let errorMessage = res ? `El servidor respondió con ${res.status}.` : "No se pudo conectar con Gemini después de varios intentos.";
+        if (res) {
+          const errorData = await res.json().catch(() => ({}));
+          if (typeof errorData.error === "string") errorMessage = errorData.error;
+        }
+        throw new Error(errorMessage);
       }
 
       const data = await res.json();
@@ -222,19 +256,31 @@ export default function AiChatbot() {
       };
 
       setMessages((prev) => [...prev, botMessage]);
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: generateUniqueId(),
-          role: "assistant",
-          content: "⚠️ Hubo un error de conexión persistente al consultar el asistente. Intenta de nuevo más tarde.",
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        },
-      ]);
+    } catch (error) {
+      if (!controller.signal.aborted) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: generateUniqueId(),
+            role: "assistant",
+            content: `⚠️ ${error instanceof Error ? error.message : "Hubo un error de conexión al consultar a Gemini."}`,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          },
+        ]);
+      }
     } finally {
-      setLoading(false);
+      if (requestControllerRef.current === controller) {
+        requestControllerRef.current = null;
+        setLoading(false);
+      }
     }
+  };
+
+  const cancelRequest = () => requestControllerRef.current?.abort();
+
+  const reuseMessageForEditing = (content: string) => {
+    setInputMessage(content);
+    inputRef.current?.focus();
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -468,9 +514,33 @@ export default function AiChatbot() {
                         ) : (
                           renderFormattedMessage(msg.content, msg.id)
                         )}
-                        <span className="mt-1.5 block text-[9px] text-zinc-500 text-right">
-                          {msg.timestamp}
-                        </span>
+                        <div className="mt-1.5 flex items-center justify-between gap-3">
+                          <span className="text-[9px] text-zinc-500">{msg.timestamp}</span>
+                          {isUser && (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleSendMessage(msg.content)}
+                                disabled={loading}
+                                aria-label="Repetir esta petición"
+                                title="Repetir petición"
+                                className="rounded-md p-1 text-zinc-400 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => reuseMessageForEditing(msg.content)}
+                                disabled={loading}
+                                aria-label="Editar esta petición como nueva"
+                                title="Editar y reutilizar"
+                                className="rounded-md p-1 text-zinc-400 transition hover:bg-white/10 hover:text-white disabled:opacity-40"
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                       {isUser && (
                         <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-zinc-300 mt-0.5">
@@ -524,14 +594,26 @@ export default function AiChatbot() {
                     placeholder={`Pregúntale al bot sobre ${currentModule || "programación"}...`}
                     className="w-full resize-none rounded-2xl border border-white/10 bg-black/40 py-2.5 pl-3.5 pr-11 text-xs text-white placeholder-zinc-500 focus:border-emerald-400/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 max-h-24"
                   />
-                  <button
-                    onClick={() => handleSendMessage()}
-                    disabled={!inputMessage.trim() || loading}
-                    className="absolute right-2 flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500 text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-40 disabled:hover:bg-emerald-500 cursor-pointer shadow-md"
-                    title="Enviar mensaje"
-                  >
-                    <Send className="h-3.5 w-3.5" />
-                  </button>
+                  {loading ? (
+                    <button
+                      type="button"
+                      onClick={cancelRequest}
+                      className="absolute right-2 flex h-7 w-7 items-center justify-center rounded-xl bg-red-500 text-white transition hover:bg-red-400 cursor-pointer shadow-md"
+                      title="Cancelar solicitud"
+                      aria-label="Cancelar solicitud"
+                    >
+                      <Square className="h-3 w-3 fill-current" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleSendMessage()}
+                      disabled={!inputMessage.trim()}
+                      className="absolute right-2 flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500 text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-40 disabled:hover:bg-emerald-500 cursor-pointer shadow-md"
+                      title="Enviar mensaje"
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
                 <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-zinc-500">
                   <span>Enter para enviar</span>

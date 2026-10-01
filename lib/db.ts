@@ -773,6 +773,12 @@ export async function ensureUserApiKeysTable() {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_user_api_keys_user_provider 
       ON user_api_keys (user_id, provider);
     `);
+
+    await pool.query(
+      `UPDATE user_api_keys
+       SET model = 'gemini-3.5-flash-lite', updated_at = CURRENT_TIMESTAMP
+       WHERE provider = 'gemini' AND model IS DISTINCT FROM 'gemini-3.5-flash-lite'`
+    );
   } catch (err) {
     console.error("Error ensuring user_api_keys schema:", err);
   }
@@ -797,7 +803,7 @@ export async function getUserAiConfigs(userId: number | string): Promise<UserApi
         provider: r.provider || "gemini",
         api_key: r.api_key || "",
         base_url: r.base_url || "",
-        model: r.model || "gemini-3.7-flash",
+        model: r.provider === "gemini" ? "gemini-3.5-flash-lite" : r.model || "llama3",
         is_active: Boolean(r.is_active),
         updated_at: r.updated_at,
       }));
@@ -827,7 +833,7 @@ export async function saveUserAiConfig(
   const safeBaseUrl = baseUrl ?? "";
   const safeModel = model ?? "";
   const defBaseUrl = normProvider === "ollama" ? (safeBaseUrl || "http://localhost:11434") : (safeBaseUrl || "");
-  const defModel = normProvider === "ollama" ? (safeModel || "llama3") : (safeModel || "gemini-3.7-flash");
+  const defModel = normProvider === "ollama" ? (safeModel || "llama3") : "gemini-3.5-flash-lite";
 
   const connectionString = getConnectionString();
   if (connectionString) {

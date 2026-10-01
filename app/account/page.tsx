@@ -57,7 +57,7 @@ export default function AccountPage() {
   const [activeTabAi, setActiveTabAi] = useState<"gemini">("gemini");
   const [activeProvider, setActiveProvider] = useState<"gemini">("gemini");
   const [geminiApiKey, setGeminiApiKey] = useState("");
-  const [geminiModel, setGeminiModel] = useState("gemini-3.7-flash-lite");
+  const [geminiModel, setGeminiModel] = useState("gemini-3.5-flash-lite");
   const [aiSaving, setAiSaving] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
@@ -702,7 +702,7 @@ export default function AccountPage() {
                         onChange={(e) => setGeminiModel(e.target.value)}
                         className="w-full rounded-xl border border-zinc-700 bg-zinc-800/80 py-2.5 px-3 text-xs text-white focus:border-amber-500 focus:outline-none transition font-mono"
                       >
-                        <option value="gemini-3.7-flash-lite">gemini-3.7-flash-lite (Modelo optimizado)</option>
+                        <option value="gemini-3.5-flash-lite">gemini-3.5-flash-lite (Lite, cuota gratuita)</option>
                       </select>
                     </div>
 

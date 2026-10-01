@@ -15,7 +15,7 @@ export async function GET() {
       provider: row.provider || "gemini",
       apiKey: row.api_key || "",
       baseUrl: row.base_url || "",
-      model: row.model || "gemini-3.7-flash",
+      model: "gemini-3.5-flash-lite",
       isActive: Boolean(row.is_active),
       updatedAt: row.updated_at,
     }));
@@ -57,7 +57,7 @@ export async function POST(req: NextRequest) {
       provider,
       apiKey,
       baseUrl,
-      model,
+      "gemini-3.5-flash-lite",
       isActive
     );
 

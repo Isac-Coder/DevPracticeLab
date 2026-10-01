@@ -18,7 +18,6 @@ export async function POST(req: NextRequest) {
     let provider = providerOverride || "gemini";
     let apiKey = "";
     let baseUrl = "http://localhost:11434";
-    let model = "";
 
     if (session?.userId) {
       try {
@@ -29,7 +28,6 @@ export async function POST(req: NextRequest) {
           provider = selectedConfig.provider || "gemini";
           apiKey = selectedConfig.api_key || "";
           baseUrl = selectedConfig.base_url || "";
-          model = selectedConfig.model || "";
         }
       } catch (dbErr) {
         console.error("Error al consultar configuración de IA en BD:", dbErr);
@@ -60,7 +58,7 @@ ${moduleContext ? `Contexto: ${moduleContext}.` : ""}`;
       });
     }
 
-    const selectedModel = model || "gemini-3.7-flash-lite";
+    const selectedModel = "gemini-3.5-flash-lite";
     const contents = messages.slice(-5).map((m: { role: string; content: string }) => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
@@ -69,31 +67,41 @@ ${moduleContext ? `Contexto: ${moduleContext}.` : ""}`;
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
     const controller = new AbortController();
+    const abortOnClientCancel = () => controller.abort();
+    if (req.signal.aborted) {
+      controller.abort();
+    } else {
+      req.signal.addEventListener("abort", abortOnClientCancel, { once: true });
+    }
     const timeoutId = setTimeout(() => controller.abort(), 120000);
 
-    const res = await fetch(geminiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      signal: controller.signal,
-      body: JSON.stringify({
-        system_instruction: {
-          parts: [{ text: systemPrompt }],
+    let res: Response;
+    try {
+      res = await fetch(geminiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-        contents,
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 1000,
-        },
-      }),
-    });
-
-    clearTimeout(timeoutId);
+        signal: controller.signal,
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: systemPrompt }],
+          },
+          contents,
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 1000,
+          },
+        }),
+      });
+    } finally {
+      clearTimeout(timeoutId);
+      req.signal.removeEventListener("abort", abortOnClientCancel);
+    }
 
     if (!res.ok) {
       const errBody = await res.text();
-      console.error("Error respuesta Gemini API:", res.status, errBody);
+      console.error(`Error respuesta Gemini API (${selectedModel}):`, res.status, errBody);
 
       if (res.status === 400 || res.status === 403) {
         return NextResponse.json({
@@ -103,14 +111,14 @@ ${moduleContext ? `Contexto: ${moduleContext}.` : ""}`;
         });
       }
 
-      // Fallback automático a motor experto in-process si Gemini experimenta alta demanda (503/429) o errores
-      const localReply = generateLocalExpertResponse(messages, moduleContext);
       return NextResponse.json({
-        reply: localReply,
-        provider: "gemini-local",
+        error: res.status === 429 || res.status === 503
+          ? "Gemini está temporalmente saturado. La solicitud se reintentará automáticamente; inténtalo de nuevo en unos segundos si continúa."
+          : `Gemini no pudo procesar la solicitud (HTTP ${res.status}).`,
+        provider: "gemini",
         model: selectedModel,
-        needsKey: false,
-      });
+        retryable: res.status === 429 || res.status === 503,
+      }, { status: res.status === 429 || res.status === 503 ? 503 : 502 });
     }
 
     const data = await res.json();
