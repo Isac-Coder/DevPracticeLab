@@ -48,6 +48,14 @@ declare global {
     updated_at: Date;
   }> | undefined;
   // eslint-disable-next-line no-var
+  var __mockEditorWorkspaces: Array<{
+    user_id: string;
+    module_key: string;
+    files: EditorWorkspaceFile[];
+    active_file_id: string | null;
+    updated_at: Date;
+  }> | undefined;
+  // eslint-disable-next-line no-var
   var __schemaInitialized: boolean | undefined;
 }
 
@@ -86,6 +94,19 @@ if (!global.__mockAvailableModules) {
 }
 if (!global.__mockUserSubscriptions) global.__mockUserSubscriptions = [];
 if (!global.__mockUserApiKeys) global.__mockUserApiKeys = [];
+if (!global.__mockEditorWorkspaces) global.__mockEditorWorkspaces = [];
+
+export interface EditorWorkspaceFile {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface EditorWorkspaceRecord {
+  files: EditorWorkspaceFile[];
+  activeFileId: string | null;
+  updatedAt: Date | null;
+}
 
 export interface AvailableModuleRecord {
   id: number;
@@ -154,6 +175,17 @@ export async function initDatabase() {
         message TEXT DEFAULT 'Daily ping - Keep going, do not stop!',
         payload JSONB DEFAULT '{}'::jsonb,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_editor_workspaces (
+        user_id TEXT NOT NULL,
+        module_key VARCHAR(50) NOT NULL,
+        files JSONB NOT NULL DEFAULT '[]'::jsonb,
+        active_file_id TEXT,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, module_key)
       );
     `);
 
@@ -598,6 +630,94 @@ export async function query(text: string, params?: unknown[]) {
   await initDatabase();
   const pool = getPool();
   return pool.query(text, params);
+}
+
+async function ensureEditorWorkspaceTable() {
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_editor_workspaces (
+      user_id TEXT NOT NULL,
+      module_key VARCHAR(50) NOT NULL,
+      files JSONB NOT NULL DEFAULT '[]'::jsonb,
+      active_file_id TEXT,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, module_key)
+    );
+  `);
+}
+
+export async function getEditorWorkspace(
+  userId: number | string,
+  moduleKey: string
+): Promise<EditorWorkspaceRecord | null> {
+  if (getConnectionString()) {
+    await initDatabase();
+    await ensureEditorWorkspaceTable();
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT files, active_file_id, updated_at
+       FROM user_editor_workspaces
+       WHERE user_id = $1 AND module_key = $2
+       LIMIT 1`,
+      [String(userId), moduleKey]
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+
+    return {
+      files: typeof row.files === "string" ? JSON.parse(row.files) : row.files,
+      activeFileId: row.active_file_id,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  const workspace = global.__mockEditorWorkspaces!.find(
+    (entry) => entry.user_id === String(userId) && entry.module_key === moduleKey
+  );
+  return workspace
+    ? { files: workspace.files, activeFileId: workspace.active_file_id, updatedAt: workspace.updated_at }
+    : null;
+}
+
+export async function saveEditorWorkspace(
+  userId: number | string,
+  moduleKey: string,
+  files: EditorWorkspaceFile[],
+  activeFileId: string | null
+): Promise<void> {
+  if (getConnectionString()) {
+    await initDatabase();
+    await ensureEditorWorkspaceTable();
+    const pool = getPool();
+    await pool.query(
+      `INSERT INTO user_editor_workspaces (user_id, module_key, files, active_file_id, updated_at)
+       VALUES ($1, $2, $3::jsonb, $4, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, module_key)
+       DO UPDATE SET files = EXCLUDED.files,
+                     active_file_id = EXCLUDED.active_file_id,
+                     updated_at = CURRENT_TIMESTAMP`,
+      [String(userId), moduleKey, JSON.stringify(files), activeFileId]
+    );
+    return;
+  }
+
+  const existing = global.__mockEditorWorkspaces!.find(
+    (entry) => entry.user_id === String(userId) && entry.module_key === moduleKey
+  );
+  if (existing) {
+    existing.files = files;
+    existing.active_file_id = activeFileId;
+    existing.updated_at = new Date();
+    return;
+  }
+
+  global.__mockEditorWorkspaces!.push({
+    user_id: String(userId),
+    module_key: moduleKey,
+    files,
+    active_file_id: activeFileId,
+    updated_at: new Date(),
+  });
 }
 
 // ==========================================

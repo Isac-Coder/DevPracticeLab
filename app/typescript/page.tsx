@@ -31,23 +31,7 @@ const tips = [
   },
 ];
 
-const starterCode = `type User = {
-  id: number;
-  name: string;
-  role: "admin" | "editor";
-};
-
-const users: User[] = [
-  { id: 1, name: "Ana", role: "admin" },
-  { id: 2, name: "Luis", role: "editor" },
-];
-
-function getUserSummary(user: User) {
-  return user.name + " (" + user.role + ")";
-}
-
-console.log(users.map(getUserSummary));
-`;
+const starterCode = "";
 
 export default function TypeScriptPage() {
   const { recordCommand } = usePracticeProgress();
@@ -96,7 +80,6 @@ export default function TypeScriptPage() {
             <div className="grid gap-8 xl:grid-cols-[1.7fr_0.9fr]">
               <CodePracticeEditor
                 title="Editor TypeScript"
-                subtitle="Escribe tu código y compílalo para ver errores con TypeScript"
                 accent="blue"
                 fileName="app.ts"
                 initialCode={starterCode}

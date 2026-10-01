@@ -38,7 +38,16 @@ export default function DocsPage() {
   const [docData, setDocData] = useState<LiveDocResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 500);
+
+    return () => clearTimeout(handler);
+  }, [searchQuery]);
 
   useEffect(() => {
     // Removed Gemini API key loading from localStorage
@@ -63,8 +72,8 @@ export default function DocsPage() {
   }, []);
 
   useEffect(() => {
-    fetchDocs(activeTab, searchQuery);
-  }, [activeTab, searchQuery, fetchDocs]);
+    fetchDocs(activeTab, debouncedQuery);
+  }, [activeTab, debouncedQuery, fetchDocs]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -92,19 +101,10 @@ export default function DocsPage() {
   );
 
   const hasLocalResults = (filteredCommands?.length ?? 0) > 0;
-  const hasExternalResults = (docData?.webResults?.length ?? 0) > 0;
+  const filteredWebResults = docData?.webResults ?? [];
+  const hasExternalResults = filteredWebResults.length > 0;
 
-  const filteredTopics = docData?.content.topics.filter(
-    (t) => {
-      const query = searchQuery.toLowerCase().trim();
-      if (!query) return true;
-      const tokens = query.split(/\s+/).filter(Boolean);
-      return tokens.every(token => 
-        t.title.toLowerCase().includes(token) || 
-        t.body.toLowerCase().includes(token)
-      );
-    }
-  );
+  const filteredTopics = docData?.content.topics ?? [];
 
   return (
     <div className="flex min-h-screen flex-col bg-[#050a0f] text-zinc-100">
@@ -182,7 +182,7 @@ export default function DocsPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 space-y-10">
           {/* Search Bar */}
           <div className="flex flex-col gap-3 md:flex-row md:items-center">
-            <div className="relative max-w-md flex-1">
+            <div className="relative w-full flex-1">
               <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-400">
                 <Search className="h-4 w-4" />
               </div>
@@ -281,7 +281,20 @@ export default function DocsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {docData.content.topics.map((topic, idx) => (
+                  {hasExternalResults && (
+                    <div className="md:col-span-2 p-4 rounded-xl border border-white/5 bg-white/5">
+                      <h4 className="text-sm font-semibold text-emerald-400 mb-3">Resultados de búsqueda web:</h4>
+                      <div className="space-y-3">
+                        {filteredWebResults?.map((result, idx) => (
+                          <a key={idx} href={result.url} target="_blank" rel="noopener noreferrer" className="block p-3 rounded-lg hover:bg-white/10 transition">
+                            <span className="text-sm font-bold text-white">{result.title}</span>
+                            <p className="text-xs text-zinc-400 mt-0.5">{result.summary}</p>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {filteredTopics?.map((topic, idx) => (
                     <div key={idx} className="space-y-3">
                       <h4 className="text-xl font-semibold text-zinc-900 border-b border-zinc-200 pb-2">{topic.title}</h4>
                       <p className="text-sm text-zinc-700 leading-relaxed">{topic.body}</p>
@@ -310,6 +323,19 @@ export default function DocsPage() {
                   <Workflow className="h-5 w-5 text-emerald-400" />
                   <h3>Guías Técnicas & Casos de Uso del Mundo Real</h3>
                 </div>
+
+                {/* Resultados Web */}
+                {filteredWebResults && filteredWebResults.length > 0 && (
+                  <div className="grid gap-6 lg:grid-cols-2 mb-8">
+                    {filteredWebResults.map((result, idx) => (
+                      <div key={idx} className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-5">
+                        <h4 className="text-sm font-bold text-sky-200 mb-2">{result.title}</h4>
+                        <p className="text-xs text-zinc-400 mb-3">{result.summary}</p>
+                        <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-400 hover:underline">Ver fuente original</a>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
                 <div className="grid gap-6 lg:grid-cols-2">
                   {filteredTopics?.map((topic, idx) => (

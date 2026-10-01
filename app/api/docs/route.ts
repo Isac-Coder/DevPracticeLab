@@ -183,14 +183,51 @@ const extractRelevantScrapedSection = (rawText: string, queryTerms: string) => {
 };
 
 const searchWebForCommand = async (moduleParam: string, query: string) => {
-  const moduleKey = moduleParam in OFFICIAL_DOCS_BY_MODULE ? moduleParam : "ssh";
-  const officialDocs = OFFICIAL_DOCS_BY_MODULE[moduleKey];
   const queryTerms = (query || "documentation").trim();
-
   const results: { title: string; url: string; summary: string }[] = [];
   const seen = new Set<string>();
 
-  for (const docUrl of officialDocs) {
+  if (!queryTerms) return results;
+
+  const searchTargets = [
+    `https://www.bing.com/search?q=${encodeURIComponent(`${queryTerms} ${moduleParam} official docs`)}`,
+    `https://duckduckgo.com/html/?q=${encodeURIComponent(`${queryTerms} ${moduleParam} official docs`)}`,
+  ];
+
+  const candidateUrls: string[] = [];
+
+  for (const searchUrl of searchTargets) {
+    try {
+      const searchRes = await fetch(searchUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; DevPracticeLab/1.0; +https://example.com)",
+        },
+        next: { revalidate: 3600 },
+      });
+
+      if (!searchRes.ok) continue;
+
+      const html = await searchRes.text();
+      const extractedUrls = Array.from(html.matchAll(/href="([^"]+)"/g))
+        .map((match) => normalizeSearchResultUrl(match[1]))
+        .filter((url) => url && !url.includes("duckduckgo.com") && !url.includes("bing.com") && !url.includes("microsoft.com"))
+        .slice(0, 4);
+
+      for (const url of extractedUrls) {
+        if (!seen.has(url)) {
+          seen.add(url);
+          candidateUrls.push(url);
+        }
+      }
+
+      if (candidateUrls.length >= 3) break;
+    } catch {
+      continue;
+    }
+  }
+
+  const fallbackUrls = OFFICIAL_DOCS_BY_MODULE[moduleParam] || OFFICIAL_DOCS_BY_MODULE.ssh;
+  for (const docUrl of [...candidateUrls, ...fallbackUrls]) {
     try {
       const jinaUrl = `https://r.jina.ai/http://${docUrl.replace(/^https?:\/\//, "")}`;
       const res = await fetch(jinaUrl, {
@@ -202,24 +239,33 @@ const searchWebForCommand = async (moduleParam: string, query: string) => {
 
       const raw = await res.text();
       const titleMatch = raw.match(/^Title:\s*(.+)$/m);
-      const title = titleMatch ? titleMatch[1].trim() : `${moduleKey.toUpperCase()} docs`;
-      const summary = extractRelevantScrapedSection(raw, queryTerms);
+      const title = titleMatch ? titleMatch[1].trim() : `${moduleParam.toUpperCase()} docs`;
+      const summary = extractRelevantScrapedSection(raw, queryTerms) || compactSummary(stripHtml(raw), 250);
 
-      if (!summary || summary.length < 80) continue;
-      if (!isQueryRelevant(title, summary, queryTerms)) continue;
+      if (!summary || summary.length < 60) continue;
+      if (!isQueryRelevant(title, summary, queryTerms) && !title.toLowerCase().includes(moduleParam.toLowerCase())) {
+        continue;
+      }
 
       const signature = `${title.toLowerCase()}::${summary.toLowerCase().slice(0, 200)}`;
       if (seen.has(signature)) continue;
 
       seen.add(signature);
-      results.push({
-        title,
-        url: docUrl,
-        summary,
-      });
+      results.push({ title, url: docUrl, summary });
+
+      if (results.length >= 3) break;
     } catch {
       continue;
     }
+  }
+
+  if (results.length === 0) {
+    const primaryUrl = fallbackUrls[0] || SOURCES[moduleParam]?.url || SOURCES.ssh.url;
+    results.push({
+      title: `${moduleParam.toUpperCase()} official documentation`,
+      url: primaryUrl,
+      summary: `Consulta la referencia oficial de ${moduleParam} para ${queryTerms}. Esta sección se reusa desde la documentación en línea para mantener una respuesta útil incluso cuando el texto exacto no aparece en la primera página de resultados.`,
+    });
   }
 
   return results.slice(0, 3);
@@ -267,7 +313,7 @@ const isQueryRelevant = (title: string, summary: string, query: string) => {
   });
 };
 
-const buildDocsFromOfficialSource = (moduleParam: string, html: string): DocBundle => {
+const buildDocsFromOfficialSource = (moduleParam: string, html: string, query?: string): DocBundle => {
   const text = stripHtml(html);
   const normalized = text.toLowerCase();
   const normalizedModule = (moduleParam === "docker" || moduleParam === "postgres" || moduleParam === "typescript" || moduleParam === "ssh")
@@ -351,10 +397,16 @@ const buildDocsFromOfficialSource = (moduleParam: string, html: string): DocBund
     },
   ];
 
-  const extractedTopics = defaultTopics.map((topic, index) => ({
-    ...topic,
-    body: index === 0 ? `${topic.body} Fragmento de documentación oficial: ${text.slice(0, 250)}...` : topic.body,
-  }));
+  const extractedTopics = defaultTopics.map((topic, index) => {
+    let body = index === 0 ? `${topic.body} Fragmento de documentación oficial: ${text.slice(0, 250)}...` : topic.body;
+    if (query) {
+       const lowerBody = body.toLowerCase();
+       if (!lowerBody.includes(query.toLowerCase())) {
+          return null;
+       }
+    }
+    return { ...topic, body };
+  }).filter(Boolean) as { title: string; body: string; codeSample?: string }[];
 
   const resolvedModuleTitle = {
     ssh: "OpenSSH Protocol & Remote Administration Reference",
@@ -392,6 +444,10 @@ export async function GET(req: NextRequest) {
   let remoteText = "";
   let isOnline = false;
   let webResults: { title: string; url: string; summary: string }[] = [];
+
+  if (searchQuery) {
+    webResults = await searchWebForCommand(moduleParam, searchQuery);
+  }
 
   if (sourceConfig.url) {
     try {
