@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
-  CheckCircle2,
   Check,
+  CheckCircle2,
   Code2,
   Copy,
   Download,
@@ -17,8 +17,9 @@ import {
   X,
 } from "lucide-react";
 import * as ts from "typescript";
+import { executeSQL, tables } from "@/app/postgres/commands";
 
-interface EditorFile {
+export interface EditorFile {
   id: string;
   name: string;
   code: string;
@@ -29,8 +30,10 @@ interface CodePracticeEditorProps {
   accent: string;
   fileName: string;
   initialCode: string;
-  moduleKey: "typescript";
+  moduleKey: "typescript" | "postgres";
   onRun?: (command: string) => void;
+  onFilesChange?: (files: EditorFile[]) => void;
+  onResult?: (result: { ok: boolean; output: string[]; summary: string } | null) => void;
 }
 
 const formatDiagnostic = (diagnostic: ts.Diagnostic) => {
@@ -58,6 +61,8 @@ export default function CodePracticeEditor({
   initialCode,
   moduleKey,
   onRun,
+  onFilesChange,
+  onResult,
 }: CodePracticeEditorProps) {
   const [files, setFiles] = useState<EditorFile[]>([
     buildFile(fileName || "app.ts", initialCode || ""),
@@ -65,19 +70,37 @@ export default function CodePracticeEditor({
   const [activeFileId, setActiveFileId] = useState<string>(files[0]?.id ?? "");
   const [result, setResult] = useState<{ ok: boolean; output: string[]; summary: string } | null>(null);
   const [copied, setCopied] = useState(false);
-  const [lintEnabled, setLintEnabled] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState("");
   const [workspaceLoaded, setWorkspaceLoaded] = useState(false);
   const [canPersistWorkspace, setCanPersistWorkspace] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"loading" | "saved" | "saving" | "error" | "signin">("loading");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const lineNumberRef = useRef<HTMLDivElement | null>(null);
+
+  const handleScroll = (e: React.UIEvent<HTMLTextAreaElement>) => {
+    if (lineNumberRef.current) {
+      lineNumberRef.current.scrollTop = e.currentTarget.scrollTop;
+    }
+  };
 
   const activeFile = files.find((file) => file.id === activeFileId) ?? files[0];
   const code = activeFile?.code ?? "";
   const fileNameInUse = activeFile?.name ?? fileName;
   const lineCount = Math.max(1, code.split("\n").length);
   const lineNumbers = Array.from({ length: lineCount }, (_, index) => index + 1);
+
+  useEffect(() => {
+    if (onFilesChange) {
+      onFilesChange(files);
+    }
+  }, [files, onFilesChange]);
+
+  useEffect(() => {
+    if (onResult) {
+      onResult(result);
+    }
+  }, [onResult, result]);
 
   useEffect(() => {
     let cancelled = false;
@@ -197,6 +220,15 @@ export default function CodePracticeEditor({
     setIsRenaming(false);
   };
 
+  const fillSqlFromTable = (tableName: string) => {
+    const schema = tables[tableName];
+    const columns = schema?.columns ?? [];
+    const selectedColumns = columns.slice(0, Math.min(4, columns.length));
+    const preview = selectedColumns.length > 0 ? selectedColumns.join(", ") : "*";
+    const query = `SELECT ${preview} FROM ${tableName} LIMIT 10;`;
+    updateActiveFile(query);
+  };
+
   const importFiles = async (event: ChangeEvent<HTMLInputElement>) => {
     const selected = Array.from(event.target.files ?? []);
     if (!selected.length) return;
@@ -241,62 +273,32 @@ export default function CodePracticeEditor({
     URL.revokeObjectURL(url);
   };
 
-  const runLintCheck = async (source: string) => {
-    if (!lintEnabled) return null;
-
-    try {
-      const response = await fetch("/api/lint", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: source, fileName: fileNameInUse }),
-      });
-
-      if (!response.ok) {
-        return {
-          ok: false,
-          output: ["✗ ESLint no pudo ejecutarse.", "Revisa la configuración del servidor."],
-          summary: "ESLint falló.",
-        };
-      }
-
-      const data = await response.json();
-      const issues = data.issues ?? [];
-      const output: string[] = [];
-
-      if (issues.length === 0) {
-        output.push("✓ ESLint: sin advertencias ni errores.");
-        return { ok: true, output, summary: "ESLint sin problemas." };
-      }
-
-      output.push("✗ ESLint detectó avisos o errores");
-      issues.forEach((issue: { line: number; column: number; message: string; severity: string }) => {
-        output.push(`L${issue.line}:${issue.column} - ${issue.message}`);
-      });
-
-      return {
-        ok: issues.every((issue: { severity: string }) => issue.severity !== "error"),
-        output,
-        summary: issues.some((issue: { severity: string }) => issue.severity === "error")
-          ? `${issues.filter((issue: { severity: string }) => issue.severity === "error").length} error(es) ESLint`
-          : `${issues.length} advertencia(s) ESLint`,
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        output: ["✗ ESLint no disponible en este momento.", String(error)],
-        summary: "ESLint no disponible.",
-      };
-    }
-  };
-
   const runCompile = async () => {
     const source = code.trim();
     if (!source) {
       setResult({
         ok: false,
-        output: ["✗ El editor está vacío.", "Escribe tu código y pulsa Compilar para validar."],
+        output: ["✗ El editor está vacío.", "Escribe tu consulta y pulsa Compilar para validar."],
         summary: "Sin código para compilar.",
       });
+      return;
+    }
+
+    if (moduleKey === "postgres") {
+      const execution = executeSQL(source);
+      const output = execution.isError
+        ? ["✗ Consulta inválida", execution.output]
+        : ["✓ Consulta ejecutada correctamente", execution.output];
+
+      setResult({
+        ok: !execution.isError,
+        output,
+        summary: execution.isError ? "Error de SQL." : "Consulta ejecutada.",
+      });
+
+      if (onRun) {
+        onRun(source);
+      }
       return;
     }
 
@@ -346,29 +348,16 @@ export default function CodePracticeEditor({
       }
     }
 
-    const lintResult = lintEnabled ? await runLintCheck(source) : null;
-
-    if (lintResult) {
-      output.push("");
-      output.push("--- ESLint ---");
-      output.push(...lintResult.output);
-    }
-
     const hasCompileError = errors.length > 0;
-    const finalOk = !hasCompileError && (!lintResult || lintResult.ok);
 
     setResult({
-      ok: finalOk,
+      ok: !hasCompileError,
       output,
-      summary: hasCompileError
-        ? `${errors.length} error(es) detectado(s).`
-        : lintResult
-          ? lintResult.summary
-          : "Sin errores de compilación.",
+      summary: hasCompileError ? `${errors.length} error(es) detectado(s).` : "Sin errores de compilación.",
     });
 
     if (onRun) {
-      onRun(hasCompileError ? "tsc --check" : lintEnabled ? "tsc && eslint" : "tsc");
+      onRun(hasCompileError ? "tsc --check" : "tsc");
     }
   };
 
@@ -431,19 +420,6 @@ export default function CodePracticeEditor({
           </button>
 
           <button
-            type="button"
-            onClick={() => setLintEnabled((prev) => !prev)}
-            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 text-[11px] font-semibold transition ${
-              lintEnabled
-                ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200"
-                : "border-zinc-700 bg-zinc-900 text-zinc-300 hover:border-zinc-500 hover:text-white"
-            }`}
-          >
-            <span className={`h-2 w-2 rounded-full ${lintEnabled ? "bg-emerald-400" : "bg-zinc-500"}`} />
-            ESLint {lintEnabled ? "ON" : "OFF"}
-          </button>
-
-          <button
             onClick={copyCode}
             className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-[11px] font-semibold text-zinc-300 transition hover:border-zinc-500 hover:text-white"
           >
@@ -452,10 +428,12 @@ export default function CodePracticeEditor({
           </button>
           <button
             onClick={runCompile}
+            title="Compilar (Ctrl + Enter)"
             className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[11px] font-bold transition ${theme.button}`}
           >
             <Play className="h-3.5 w-3.5" />
-            {lintEnabled ? "Compilar + ESLint" : "Compilar"}
+            Compilar
+            <span className="text-[10px] opacity-80">Ctrl + Enter</span>
           </button>
         </div>
       </div>
@@ -538,8 +516,40 @@ export default function CodePracticeEditor({
           onChange={importFiles}
         />
 
-        <div className="flex min-h-[330px] bg-[#0d1727]">
-          <div className="w-12 shrink-0 select-none border-r border-zinc-800 bg-[#0b1622] px-2 py-4 text-right font-mono text-[11px] leading-6 text-zinc-600">
+        <div className="flex h-[360px] max-h-[500px] overflow-hidden bg-[#0d1727]">
+          {moduleKey === "postgres" && (
+            <div className="w-48 shrink-0 overflow-y-auto border-r border-zinc-800 bg-[#0b1622] p-4 text-zinc-400">
+              <h4 className="mb-2 text-xs font-semibold uppercase text-zinc-500">Tablas</h4>
+              <div className="space-y-2">
+                {Object.keys(tables).map((tableName) => {
+                  const schema = tables[tableName];
+                  const columnsPreview = schema?.columns?.slice(0, 3).join(", ") ?? "*";
+
+                  return (
+                    <button
+                      key={tableName}
+                      type="button"
+                      onClick={() => fillSqlFromTable(tableName)}
+                      className="w-full rounded-lg border border-zinc-800 bg-transparent px-2 py-2 text-left transition hover:border-indigo-500/40 hover:bg-indigo-500/5 hover:text-white"
+                      title={`Insertar SQL para ${tableName}`}
+                    >
+                      <div className="flex items-center gap-2 text-xs font-medium text-zinc-200">
+                        <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+                        {tableName}
+                      </div>
+                      <div className="mt-1 text-[10px] text-zinc-500 font-mono">
+                        SELECT {columnsPreview} FROM {tableName} LIMIT 10;
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div
+            ref={lineNumberRef}
+            className="w-12 shrink-0 select-none overflow-hidden border-r border-zinc-800 bg-[#0b1622] px-2 py-4 text-right font-mono text-[11px] leading-6 text-zinc-600"
+          >
             {lineNumbers.map((line) => (
               <div key={line} className="h-6">
                 {line}
@@ -547,18 +557,26 @@ export default function CodePracticeEditor({
             ))}
           </div>
 
-          <div className="relative flex-1">
+          <div className="relative flex-1 overflow-hidden">
             {!code.trim() && (
               <div className="pointer-events-none absolute left-4 top-4 text-xs text-zinc-500">
-                Escribe tu código TypeScript aquí...
+                {moduleKey === "postgres" ? "Escribe tu consulta SQL aquí..." : "Escribe tu código TypeScript aquí..."}
               </div>
             )}
             <textarea
               value={code}
               onChange={(event) => updateActiveFile(event.target.value)}
+              onScroll={handleScroll}
+              onKeyDown={(event) => {
+                const isCompileShortcut = (event.ctrlKey || event.metaKey) && (event.key === "Enter" || event.code === "Enter");
+                if (isCompileShortcut) {
+                  event.preventDefault();
+                  void runCompile();
+                }
+              }}
               spellCheck={false}
               placeholder=""
-              className={`h-[330px] w-full resize-y border-0 bg-transparent px-4 py-4 font-mono text-sm leading-6 text-slate-200 outline-none placeholder:text-zinc-600 ${theme.ring}`}
+              className={`h-full w-full resize-none border-0 bg-transparent px-4 py-4 font-mono text-sm leading-6 text-slate-200 outline-none overflow-y-auto placeholder:text-zinc-600 ${theme.ring}`}
               style={{
                 tabSize: 2,
                 lineHeight: "1.5rem",
@@ -569,35 +587,37 @@ export default function CodePracticeEditor({
         </div>
       </div>
 
-      <div className="p-5">
-        <div className="mb-3 flex items-center justify-between gap-2">
-          <div className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${theme.badge}`}>
-            <RefreshCcw className="h-3 w-3" />
-            Resultado de compilación
-          </div>
-          <div className="flex items-center gap-3">
-            <span className={`text-[10px] ${saveStatus === "saved" ? "text-emerald-400" : saveStatus === "error" ? "text-red-400" : "text-zinc-500"}`}>
-              {saveStatus === "loading" ? "Cargando archivos..." : saveStatus === "saving" ? "Guardando..." : saveStatus === "saved" ? "Guardado" : saveStatus === "signin" ? "Inicia sesión para sincronizar" : "No se pudo guardar"}
-            </span>
-          {result && (
-            <span className={`text-[11px] font-semibold ${result.ok ? "text-emerald-400" : "text-red-400"}`}>
-              {result.summary}
-            </span>
-          )}
-          </div>
-        </div>
-
-        <div className={`rounded-2xl border p-4 font-mono text-xs shadow-inner ${result?.ok ? theme.success : result ? theme.danger : "border-zinc-800 bg-zinc-900/60 text-zinc-400"}`}>
-          {result ? (
-            <pre className="whitespace-pre-wrap leading-6">{result.output.join("\n")}</pre>
-          ) : (
-            <div className="flex items-center gap-2 text-zinc-400">
-              <TriangleAlert className="h-4 w-4" />
-              Presiona “Compilar” para validar el código.
+      {moduleKey === "typescript" && (
+        <div className="p-5">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className={`inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.12em] ${theme.badge}`}>
+              <RefreshCcw className="h-3 w-3" />
+              Resultado de compilación
             </div>
-          )}
+            <div className="flex items-center gap-3">
+              <span className={`text-[10px] ${saveStatus === "saved" ? "text-emerald-400" : saveStatus === "error" ? "text-red-400" : "text-zinc-500"}`}>
+                {saveStatus === "loading" ? "Cargando archivos..." : saveStatus === "saving" ? "Guardando..." : saveStatus === "saved" ? "Guardado" : saveStatus === "signin" ? "Inicia sesión para sincronizar" : "No se pudo guardar"}
+              </span>
+              {result && (
+                <span className={`text-[11px] font-semibold ${result.ok ? "text-emerald-400" : "text-red-400"}`}>
+                  {result.summary}
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className={`rounded-2xl border p-4 font-mono text-xs shadow-inner ${result?.ok ? theme.success : result ? theme.danger : "border-zinc-800 bg-zinc-900/60 text-zinc-400"}`}>
+            {result ? (
+              <pre className="whitespace-pre-wrap leading-6">{result.output.join("\n")}</pre>
+            ) : (
+              <div className="flex items-center gap-2 text-zinc-400">
+                <TriangleAlert className="h-4 w-4" />
+                Presiona “Compilar” para validar el código.
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

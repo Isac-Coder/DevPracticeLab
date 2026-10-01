@@ -2,18 +2,19 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
 import { getEditorWorkspace, saveEditorWorkspace, type EditorWorkspaceFile } from "@/lib/db";
 
-const MODULE_KEY = "typescript";
-const MAX_FILES = 100;
+const MAX_FILES = 1000;
 const MAX_CODE_LENGTH = 1_000_000;
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const requestedModule = searchParams.get("module") ?? "typescript";
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Inicia sesión para cargar tus archivos." }, { status: 401 });
     }
 
-    const workspace = await getEditorWorkspace(session.userId, MODULE_KEY);
+    const workspace = await getEditorWorkspace(session.userId, requestedModule);
     return NextResponse.json({
       files: workspace?.files ?? [],
       activeFileId: workspace?.activeFileId ?? null,
@@ -33,6 +34,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
+    const moduleKey = body.moduleKey ?? "typescript";
     if (!Array.isArray(body?.files) || body.files.length === 0 || body.files.length > MAX_FILES) {
       return NextResponse.json({ error: `El workspace debe tener entre 1 y ${MAX_FILES} archivos.` }, { status: 400 });
     }
@@ -62,7 +64,7 @@ export async function PUT(request: Request) {
       ? body.activeFileId as string
       : files[0].id;
 
-    await saveEditorWorkspace(session.userId, MODULE_KEY, files, activeFileId);
+    await saveEditorWorkspace(session.userId, moduleKey, files, activeFileId);
     return NextResponse.json({ success: true, activeFileId });
   } catch (error) {
     console.error("Error al guardar el workspace del editor:", error);

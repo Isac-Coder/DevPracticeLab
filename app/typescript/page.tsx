@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowLeft, Code2, Layers, Shield, Sparkles, Box, FileCode, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Box, Code2, FileCode, Layers, Shield, Sparkles } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 import Navbar from "@/app/components/Navbar";
+import CodePracticeEditor, { type EditorFile } from "@/app/components/CodePracticeEditor";
 import PracticeAuthGuard from "@/app/components/PracticeAuthGuard";
 import { ModuleProgressBar } from "@/app/components/PracticeProgressBar";
-import CodePracticeEditor from "@/app/components/CodePracticeEditor";
 import { usePracticeProgress } from "@/lib/ProgressContext";
 
 const tips = [
@@ -35,6 +36,7 @@ const starterCode = "";
 
 export default function TypeScriptPage() {
   const { recordCommand } = usePracticeProgress();
+  const [files, setFiles] = useState<EditorFile[]>([]);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#070d1e]">
@@ -52,7 +54,7 @@ export default function TypeScriptPage() {
             </Link>
 
             <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-400 border border-blue-500/20">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-blue-500/20 bg-blue-500/10 text-blue-400">
                 <Code2 className="h-7 w-7" />
               </div>
               <div>
@@ -60,7 +62,7 @@ export default function TypeScriptPage() {
                   Práctica <span className="text-blue-400">TypeScript</span>
                 </h1>
                 <p className="text-zinc-400">
-                  Editor de código con validación en tiempo real para tipos, interfaces, genéricos y utility types.
+                  Editor de código con validación para tipos, interfaces, genéricos y utility types.
                 </p>
               </div>
             </div>
@@ -85,38 +87,36 @@ export default function TypeScriptPage() {
                 initialCode={starterCode}
                 moduleKey="typescript"
                 onRun={(command) => recordCommand("typescript", command)}
+                onFilesChange={setFiles}
               />
 
               <div className="space-y-4">
-                <div className="rounded-xl border border-blue-900/30 bg-[#0f1b3d]/60 p-4">
+                <div className="rounded-xl border border-blue-900/30 bg-blue-950/30 p-4">
                   <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-blue-300">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Consejos TypeScript
+                    <FileCode className="h-4 w-4" />
+                    Archivos creados
                   </div>
-                  {tips.map((tip, i) => (
-                    <div
-                      key={i}
-                      className="mb-3 rounded-lg border border-blue-900/20 bg-blue-950/30 p-3 last:mb-0"
-                    >
-                      <div className="mb-1 flex items-center gap-2">
-                        <tip.icon className="h-4 w-4 text-blue-400" />
-                        <span className="text-sm font-medium text-white">{tip.title}</span>
-                      </div>
-                      <p className="text-xs text-zinc-400">{tip.desc}</p>
-                    </div>
-                  ))}
+                  <div className="space-y-1 text-xs font-mono text-zinc-300">
+                    {files.map((file) => (
+                      <p key={file.id}>• {file.name}</p>
+                    ))}
+                  </div>
                 </div>
 
-                <div className="rounded-xl border border-blue-900/30 bg-blue-950/30 p-4">
-                  <h4 className="mb-2 text-sm font-medium text-blue-400 flex items-center gap-1.5">
-                    <FileCode className="h-4 w-4" />
-                    Archivos sugeridos
-                  </h4>
-                  <div className="space-y-1 text-xs text-zinc-300 font-mono">
-                    <p>• app.ts</p>
-                    <p>• user.ts</p>
-                    <p>• generics.ts</p>
-                    <p>• tsconfig.json</p>
+                <div className="rounded-xl border border-blue-900/30 bg-blue-950/20 p-4">
+                  <div className="mb-3 text-sm font-semibold text-blue-300">Sugerencias</div>
+                  <div className="space-y-3">
+                    {tips.map(({ icon: Icon, title, desc }) => (
+                      <div key={title} className="flex gap-3 rounded-lg border border-blue-900/20 bg-[#091426] p-3">
+                        <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-300">
+                          <Icon className="h-4 w-4" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-white">{title}</p>
+                          <p className="text-xs leading-5 text-zinc-400">{desc}</p>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>

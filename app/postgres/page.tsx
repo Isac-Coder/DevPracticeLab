@@ -1,59 +1,28 @@
 "use client";
 
-import { useMemo } from "react";
-import { Database, ArrowLeft, Table2, Search, Pencil, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { Database, ArrowLeft, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import Navbar from "@/app/components/Navbar";
-import SimulatedTerminal, { type TerminalConfig } from "@/app/components/SimulatedTerminal";
+import CodePracticeEditor from "@/app/components/CodePracticeEditor";
 import PracticeAuthGuard from "@/app/components/PracticeAuthGuard";
 import { ModuleProgressBar } from "@/app/components/PracticeProgressBar";
 import { usePracticeProgress } from "@/lib/ProgressContext";
-import { getPostgresCommands, postgresWelcome } from "./commands";
+import { tables } from "@/app/postgres/commands";
 
-const tips = [
-  {
-    icon: Search,
-    title: "SELECT",
-    desc: "Consulta datos con filtros WHERE, ORDER BY y LIMIT.",
-  },
-  {
-    icon: Pencil,
-    title: "INSERT / UPDATE",
-    desc: "Agrega y modifica registros en las tablas.",
-  },
-  {
-    icon: Trash2,
-    title: "DELETE / DROP",
-    desc: "Elimina registros o tablas completas.",
-  },
-  {
-    icon: Table2,
-    title: "Comandos psql",
-    desc: "Usa \\dt, \\d, \\l para explorar la base de datos.",
-  },
-];
+const getColumnType = (column: string) => {
+  if (column.includes("id") || column.includes("_id")) return "int";
+  if (column.includes("_at") || column.includes("fecha")) return "timestamp";
+  if (column.includes("precio") || column.includes("total")) return "decimal";
+  if (column.includes("email") || column.includes("nombre") || column.includes("ciudad") || column.includes("categoria") || column.includes("pais") || column.includes("direccion") || column.includes("telefono")) return "varchar";
+  if (column.includes("cantidad") || column.includes("stock")) return "int";
+  return "text";
+};
 
 export default function PostgresPage() {
   const { recordCommand } = usePracticeProgress();
-
-  const terminalConfig: TerminalConfig = useMemo(
-    () => ({
-      prompt: "practica_db=# ",
-      welcomeMessage: postgresWelcome,
-      commands: getPostgresCommands(),
-      onCommandRun: (cmd: string) => recordCommand("postgres", cmd),
-      theme: {
-        bg: "bg-[#0d1117]",
-        text: "text-indigo-300",
-        prompt: "text-indigo-400",
-        border: "border-indigo-900/50",
-        header: "bg-[#161b22]",
-        headerText: "text-indigo-400",
-        headerDots: ["bg-red-500", "bg-yellow-500", "bg-green-500"],
-      },
-    }),
-    [recordCommand]
-  );
+  const [selectedTable, setSelectedTable] = useState<string | null>(null);
+  const [queryResult, setQueryResult] = useState<{ ok: boolean; output: string[]; summary: string } | null>(null);
 
   return (
     <div className="flex min-h-screen flex-col bg-[#0d1117]">
@@ -97,54 +66,65 @@ export default function PostgresPage() {
               <ModuleProgressBar module="postgres" />
             </div>
 
-            <div className="grid gap-8 lg:grid-cols-3">
-              {/* Terminal */}
-              <div className="lg:col-span-2">
-                <SimulatedTerminal config={terminalConfig} />
-              </div>
+            <div className="grid gap-8 lg:grid-cols-[1.7fr_0.9fr]">
+              <CodePracticeEditor
+                title="Editor SQL PostgreSQL"
+                accent="indigo"
+                fileName="query.sql"
+                initialCode="-- Escribe tu consulta SQL aquí"
+                moduleKey="postgres"
+                onRun={(cmd) => recordCommand("postgres", cmd)}
+                onResult={setQueryResult}
+              />
 
-              {/* Tips sidebar */}
+              {/* Dynamic Table Sidebar */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-white">
-                  Consejos PostgreSQL
-                </h3>
-                {tips.map((tip, i) => (
-                  <div
-                    key={i}
-                    className="rounded-xl border border-indigo-900/30 bg-[#161b22] p-4"
-                  >
-                    <div className="mb-2 flex items-center gap-2">
-                      <tip.icon className="h-4 w-4 text-indigo-400" />
-                      <span className="text-sm font-medium text-white">
-                        {tip.title}
-                      </span>
-                    </div>
-                    <p className="text-xs text-zinc-400">{tip.desc}</p>
-                  </div>
-                ))}
-
                 <div className="rounded-xl border border-indigo-900/30 bg-indigo-950/30 p-4">
-                  <h4 className="mb-2 text-sm font-medium text-indigo-400">
-                    🐘 Tablas disponibles
-                  </h4>
-                  <div className="space-y-1 text-xs text-zinc-300 font-mono">
-                    <p>• usuarios (5 registros)</p>
-                    <p>• productos (5 registros)</p>
-                    <p>• pedidos (5 registros)</p>
+                  <h4 className="mb-2 text-sm font-medium text-indigo-400">🐘 Tablas disponibles</h4>
+                  <div className="space-y-2 text-xs text-zinc-300 font-mono">
+                    {Object.entries(tables).map(([name, table]) => (
+                      <div key={name} className="rounded-lg border border-indigo-800/20 bg-[#0b1328]">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedTable((current) => (current === name ? null : name))}
+                          className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[11px] font-semibold text-indigo-200 transition hover:bg-indigo-500/5"
+                        >
+                          <span>{name}</span>
+                          <span className="flex items-center gap-1 text-zinc-400">
+                            <span>{table.rows.length} filas</span>
+                            <ChevronDown className={`h-3.5 w-3.5 transition ${selectedTable === name ? "rotate-180" : ""}`} />
+                          </span>
+                        </button>
+
+                        {selectedTable === name && (
+                          <div className="border-t border-indigo-900/30 px-3 py-2 text-[10px] text-zinc-400">
+                            <div className="mb-1 flex items-center justify-between gap-2 font-semibold text-zinc-200">
+                              <span>{name}</span>
+                              <span className="text-zinc-500">estructura</span>
+                            </div>
+                            <div className="space-y-1">
+                              {table.columns.map((column) => (
+                                <div key={`${name}-${column}`} className="flex items-center justify-between gap-2 rounded px-1">
+                                  <span className="text-zinc-200">{column}</span>
+                                  <span className="text-zinc-500">{getColumnType(column)}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <p className="mt-2 text-xs text-zinc-500">
-                    Ejecuta <code className="text-indigo-300">SELECT * FROM usuarios;</code> para comenzar
-                  </p>
                 </div>
 
-                <div className="rounded-xl border border-indigo-900/30 bg-[#161b22] p-4">
-                  <h4 className="mb-2 text-sm font-medium text-indigo-400">
-                    💡 Prueba estos comandos
-                  </h4>
-                  <div className="space-y-1.5 text-xs text-zinc-300 font-mono">
-                    <p>SELECT * FROM usuarios;</p>
-                    <p>SELECT nombre, email FROM usuarios WHERE edad &gt; 25;</p>
-                    <p>\d productos</p>
+                <div className="rounded-xl border border-indigo-900/30 bg-indigo-950/30 p-4">
+                  <h4 className="mb-2 text-sm font-medium text-indigo-400">Resultado de la consulta</h4>
+                  <div className="max-h-64 overflow-auto rounded-lg border border-indigo-800/20 bg-[#0b1328] p-3 font-mono text-[11px] text-zinc-200">
+                    {queryResult ? (
+                      <pre className="whitespace-pre-wrap leading-5 text-zinc-200">{queryResult.output.join("\n")}</pre>
+                    ) : (
+                      <div className="text-zinc-500">Presiona “Compilar” para ver el resultado.</div>
+                    )}
                   </div>
                 </div>
               </div>

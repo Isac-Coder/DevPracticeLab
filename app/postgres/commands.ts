@@ -1,42 +1,93 @@
 import type { CommandResult } from "@/app/components/SimulatedTerminal";
 
+const STORAGE_KEY = "postgres-practice-state-v1";
+const SESSION_STORAGE_KEY = "postgres-practice-session-state-v1";
+
+const defaultTables: Record<string, { columns: string[]; rows: string[][] }> = {
+  usuarios: {
+    columns: ["id", "nombre", "email", "edad", "ciudad", "created_at"],
+    rows: [
+      ["1", "Ana García", "ana@email.com", "28", "Madrid", "2024-01-15"],
+      ["2", "Carlos López", "carlos@email.com", "35", "Barcelona", "2024-02-20"],
+      ["3", "María Rodríguez", "maria@email.com", "24", "Sevilla", "2024-03-10"],
+      ["4", "Pedro Martínez", "pedro@email.com", "31", "Valencia", "2024-04-05"],
+      ["5", "Laura Sánchez", "laura@email.com", "22", "Bilbao", "2024-05-18"],
+    ],
+  },
+  productos: {
+    columns: ["id", "nombre", "precio", "stock", "categoria"],
+    rows: [
+      ["1", "Laptop Pro", "1299.99", "45", "Electrónica"],
+      ["2", "Mouse Wireless", "29.99", "200", "Accesorios"],
+      ["3", "Teclado Mecánico", "89.99", "80", "Accesorios"],
+      ["4", "Monitor 27\"", "349.99", "30", "Electrónica"],
+      ["5", "Webcam HD", "59.99", "150", "Accesorios"],
+    ],
+  },
+  pedidos: {
+    columns: ["id", "usuario_id", "producto_id", "cantidad", "total", "fecha"],
+    rows: [
+      ["1", "1", "1", "1", "1299.99", "2024-06-01"],
+      ["2", "2", "3", "2", "179.98", "2024-06-05"],
+      ["3", "3", "2", "3", "89.97", "2024-06-10"],
+      ["4", "1", "4", "1", "349.99", "2024-06-15"],
+      ["5", "5", "5", "1", "59.99", "2024-06-20"],
+    ],
+  },
+};
+
 // Simulated PostgreSQL state
-let tables: Record<string, { columns: string[]; rows: string[][] }> = {};
+export let tables: Record<string, { columns: string[]; rows: string[][] }> = {};
 let currentDB = "practica_db";
 
-function initDB() {
-  tables = {
-    usuarios: {
-      columns: ["id", "nombre", "email", "edad", "ciudad", "created_at"],
-      rows: [
-        ["1", "Ana García", "ana@email.com", "28", "Madrid", "2024-01-15"],
-        ["2", "Carlos López", "carlos@email.com", "35", "Barcelona", "2024-02-20"],
-        ["3", "María Rodríguez", "maria@email.com", "24", "Sevilla", "2024-03-10"],
-        ["4", "Pedro Martínez", "pedro@email.com", "31", "Valencia", "2024-04-05"],
-        ["5", "Laura Sánchez", "laura@email.com", "22", "Bilbao", "2024-05-18"],
-      ],
-    },
-    productos: {
-      columns: ["id", "nombre", "precio", "stock", "categoria"],
-      rows: [
-        ["1", "Laptop Pro", "1299.99", "45", "Electrónica"],
-        ["2", "Mouse Wireless", "29.99", "200", "Accesorios"],
-        ["3", "Teclado Mecánico", "89.99", "80", "Accesorios"],
-        ["4", "Monitor 27\"", "349.99", "30", "Electrónica"],
-        ["5", "Webcam HD", "59.99", "150", "Accesorios"],
-      ],
-    },
-    pedidos: {
-      columns: ["id", "usuario_id", "producto_id", "cantidad", "total", "fecha"],
-      rows: [
-        ["1", "1", "1", "1", "1299.99", "2024-06-01"],
-        ["2", "2", "3", "2", "179.98", "2024-06-05"],
-        ["3", "3", "2", "3", "89.97", "2024-06-10"],
-        ["4", "1", "4", "1", "349.99", "2024-06-15"],
-        ["5", "5", "5", "1", "59.99", "2024-06-20"],
-      ],
-    },
-  };
+function persistTables() {
+  if (typeof window === "undefined") return;
+
+  const payload = JSON.stringify(tables);
+
+  try {
+    window.sessionStorage.setItem(SESSION_STORAGE_KEY, payload);
+  } catch {
+    // Ignore storage failures in private browsing or restricted environments.
+  }
+
+  try {
+    window.localStorage.setItem(STORAGE_KEY, payload);
+  } catch {
+    // Ignore storage failures in private browsing or restricted environments.
+  }
+}
+
+function loadPersistedTables() {
+  if (typeof window === "undefined") return null;
+
+  try {
+    const savedSession = window.sessionStorage.getItem(SESSION_STORAGE_KEY);
+    const savedLocal = window.localStorage.getItem(STORAGE_KEY);
+    const saved = savedSession ?? savedLocal;
+    if (!saved) return null;
+
+    const parsed = JSON.parse(saved) as Record<string, { columns: string[]; rows: string[][] }> | null;
+    if (!parsed || typeof parsed !== "object") return null;
+
+    return Object.fromEntries(
+      Object.entries(parsed).map(([tableName, table]) => [
+        tableName,
+        {
+          columns: Array.isArray(table?.columns) ? table.columns : [],
+          rows: Array.isArray(table?.rows) ? table.rows : [],
+        },
+      ])
+    );
+  } catch {
+    return null;
+  }
+}
+
+export function initDB() {
+  const savedTables = loadPersistedTables();
+  tables = savedTables && Object.keys(savedTables).length > 0 ? savedTables : defaultTables;
+  persistTables();
 }
 
 function formatTable(columns: string[], rows: string[][]): string {
@@ -55,17 +106,61 @@ function formatTable(columns: string[], rows: string[][]): string {
   return `${header}\n─${separator}─\n${body}\n(${rows.length} filas)`;
 }
 
+export function executeSQL(sql: string): { output: string, isError: boolean } {
+    if (Object.keys(tables).length === 0) {
+      initDB();
+    }
+
+    const normalizedSql = sql.replace(/--.*$/gm, "").trim();
+    if (!normalizedSql) {
+      return { output: "ERROR: SQL vacío", isError: true };
+    }
+
+    const createMatch = normalizedSql.match(/^create\s+table\s+(\w+)\s*\(([\s\S]*)\)\s*;?$/i);
+    if (createMatch) {
+      const [, tableName, rawColumns] = createMatch;
+      const columns = rawColumns
+        .split(",")
+        .map((segment) => segment.trim())
+        .filter(Boolean)
+        .map((segment) => segment.split(/\s+/)[0])
+        .filter((segment) => segment && !segment.startsWith("constraint"));
+
+      if (!columns.length) {
+        return { output: `ERROR: syntax error near CREATE TABLE`, isError: true };
+      }
+
+      tables[tableName.toLowerCase()] = { columns, rows: [] };
+      persistTables();
+      return { output: `CREATE TABLE\n✅ Tabla '${tableName.toLowerCase()}' creada con columnas: ${columns.join(", ")}`, isError: false };
+    }
+
+    const dropMatch = normalizedSql.match(/^drop\s+table\s+(?:if\s+exists\s+)?(\w+)\s*;?$/i);
+    if (dropMatch) {
+      const tableName = dropMatch[1].toLowerCase();
+      if (!tables[tableName]) {
+        return { output: `ERROR: table "${tableName}" does not exist`, isError: true };
+      }
+      delete tables[tableName];
+      persistTables();
+      return { output: `DROP TABLE\n✅ Tabla '${tableName}' eliminada`, isError: false };
+    }
+
+    const result = parseSQLSelect(normalizedSql);
+    return { output: result.output, isError: !!result.isError };
+}
+
 function parseSQLSelect(sql: string): CommandResult {
-  const lowerSQL = sql.toLowerCase().trim().replace(/;$/, "");
+    const lowerSQL = sql.toLowerCase().trim().replace(/;$/, "");
 
-  // SELECT * FROM table
-  const selectAllMatch = lowerSQL.match(/select\s+\*\s+from\s+(\w+)/);
-  if (selectAllMatch) {
-    const tableName = selectAllMatch[1];
-    const table = tables[tableName];
-    if (!table) return { output: `ERROR: relation "${tableName}" does not exist`, isError: true };
+    // SELECT * FROM table
+    const selectAllMatch = lowerSQL.match(/select\s+\*\s+from\s+(\w+)/);
+    if (selectAllMatch) {
+        const tableName = selectAllMatch[1];
+        const table = tables[tableName];
+        if (!table) return { output: `ERROR: relation "${tableName}" does not exist`, isError: true };
 
-    // WHERE clause
+        // WHERE clause
     const whereMatch = lowerSQL.match(/where\s+(\w+)\s*(=|>|<|>=|<=|!=|like|ilike)\s*'?([^';\s]+)'?/);
     let filteredRows = table.rows;
     if (whereMatch) {
@@ -97,7 +192,6 @@ function parseSQLSelect(sql: string): CommandResult {
       }
     }
 
-    // LIMIT
     const limitMatch = lowerSQL.match(/limit\s+(\d+)/);
     if (limitMatch) {
       filteredRows = filteredRows.slice(0, parseInt(limitMatch[1]));
@@ -129,6 +223,8 @@ function parseSQLSelect(sql: string): CommandResult {
 
   return { output: "ERROR: syntax error in SQL", isError: true };
 }
+
+initDB();
 
 export function getPostgresCommands(): Record<string, (args: string[]) => CommandResult> {
   initDB();

@@ -1,86 +1,77 @@
 
 
----
-
 # DevPracticeLab — Contexto actualizado del proyecto
 
 ## Descripción
 
-Plataforma educativa de práctica técnica para **SSH**, **Docker**, **PostgreSQL** y **TypeScript**. La app combina terminales simuladas, retos progresivos, documentación oficial, gestión de progreso y suscripción por módulos dentro de una sola experiencia de aprendizaje.
+Plataforma educativa técnica para practicar **SSH**, **Docker**, **PostgreSQL** y **TypeScript**. Integra retos semanales, editor de código, documentación oficial, IA técnica, autenticación y gestión de módulos dentro de una misma experiencia de aprendizaje.
 
 ## Stack tecnológico
 
 - **Framework:** Next.js 16.3.6 (App Router + Turbopack)
 - **UI:** React 19, Tailwind CSS 4, Lucide React
 - **Lenguaje:** TypeScript 5 en strict mode
-- **Base de datos:** PostgreSQL en Supabase con `pg` pool
-- **Auth:** `bcryptjs`, `jose` y cookies JWT HTTP-only
-- **Programación temporal:** `node-cron`
-- **Build tool:** Turbopack integrado en Next.js
+- **Base de datos:** PostgreSQL + Supabase
+- **Auth:** `bcryptjs`, `jose`, cookies JWT HTTP-only
+- **IA:** Gemini con fallback local y persistencia de chat
+- **Build:** Turbopack + Next.js
 
-## Cambios recientes y estado actual
+## Estado real del proyecto
 
-- **Retos mejorados:** validación de respuestas, bloqueo de repetición, selección de semana, paginación de 6 retos por página, límite visual de 5 números de paginación, restricción de semanas futuras y revelación de soluciones después de fallos o éxito.
-- **Banco de retos ampliado:** 50 desafíos por módulo para SSH, Docker, PostgreSQL y TypeScript, con rotación semanal y filtro por módulo.
-- **Documentación oficial más útil:** búsqueda por módulo, extracción textual desde páginas oficiales, renderizado de contenido documental real, no URLs en bruto, soporte opcional para Gemini API key y explicación de comandos/conceptos.
-- **TypeScript mejorado:** editor de práctica con feedback de compilación real y ejemplos interactivos.
-- **UX móvil ajustada:** menú hamburguesa vertical superpuesto para pantallas pequeñas, sin romper el ancho del contenido.
-- **Diseño visual del docs page refinado:** más legible, menos saturado y más orientado a contenido editorial.
-- **Suscripciones por módulo:** el usuario puede elegir los módulos activos a los que quiere suscribirse y se guarda en tablas de relación con la base de datos.
-- **DB resilient:** se validan tablas faltantes antes de CRUD y se crea la estructura del sistema de módulos y usuarios si hace falta.
-- **AI Chatbot avanzado:** implementación de un asistente técnico (`AiChatbot`) con:
-  - Soporte para Gemini con persistencia de chat y configuración personalizada.
-  - Persistencia de chat por usuario en `localStorage`.
-  - Capa de fiabilidad: bucle de reintento de 3 intentos para llamadas a la API y refresco de config cada 30s.
-  - Lógica de fallback "Expert Local" para garantizar disponibilidad.
-  - Prompting especializado y restrictivo para asegurar precisión técnica y evitar alucinaciones.
+### Mejoras ya implementadas
+
+- Editor reutilizable para TypeScript y PostgreSQL con:
+  - archivos por pestañas
+  - importación y exportación
+  - renombrado y borrado
+  - líneas de código sincronizadas
+  - atajo `Ctrl + Enter` / `Cmd + Enter`
+  - guardado automático del workspace por módulo
+
+- PostgreSQL simulado con:
+  - tablas en estado live
+  - creación y eliminación por SQL
+  - sidebar de tablas
+  - expansión de estructura por clic
+  - resultado de consulta debajo del panel lateral
+  - persistencia en `sessionStorage` y `localStorage`
+
+- TypeScript con compilación real usando `typescript.transpileModule`.
+- Documentación oficial por módulo con contenido real y filtrado.
+- Suscripciones por módulo por usuario.
+- Chat IA con fallback experto y reintentos.
+- Retos con progresión por semanas y bloqueo de repetición.
 
 ## Arquitectura
 
 ```text
 app/
 ├── account/
-│   └── page.tsx
 ├── api/
+│   ├── ai-keys/
 │   ├── auth/
-│   │   ├── login/route.ts
-│   │   ├── logout/route.ts
-│   │   ├── me/route.ts
-│   │   ├── register/route.ts
-│   │   └── update-account/route.ts
-│   ├── docs/route.ts
-│   ├── dont-stop/route.ts
-│   ├── modules/
-│   │   ├── available/route.ts
-│   │   └── subscribe/route.ts
-│   └── ...
+│   ├── chat/
+│   ├── docs/
+│   ├── dont-stop/
+│   ├── editor-workspace/
+│   ├── lint/
+│   └── modules/
 ├── challenges/
-│   └── page.tsx
 ├── components/
+│   ├── AiChatbot.tsx
 │   ├── CodePracticeEditor.tsx
 │   ├── Navbar.tsx
 │   ├── PracticeAuthGuard.tsx
 │   ├── PracticeCard.tsx
 │   ├── PracticeProgressBar.tsx
 │   └── SimulatedTerminal.tsx
-├── docs/
-│   └── page.tsx
 ├── docker/
-│   ├── commands.ts
-│   └── page.tsx
+├── docs/
 ├── login/
-│   └── page.tsx
 ├── postgres/
-│   ├── commands.ts
-│   └── page.tsx
 ├── register/
-│   └── page.tsx
 ├── ssh/
-│   ├── commands.ts
-│   └── page.tsx
 ├── typescript/
-│   ├── commands.ts
-│   └── page.tsx
 ├── globals.css
 ├── layout.tsx
 ├── page.tsx
@@ -91,44 +82,53 @@ lib/
 ├── challengesData.ts
 ├── db.ts
 ├── ProgressContext.tsx
+public/
 scripts/
 └── daily-dont-stop.js
 ```
 
-## Base de datos y auth
-
-- **Usa PostgreSQL + Supabase** con validación automática de tablas antes de CRUD.
-- **Usuarios**: `email`, `username`, `password_hash`, `created_at`, `updated_at`.
-- **Módulos disponibles**: `slug`, `name`, `description`.
-- **Suscripciones de usuario**: relación `user_id` + `module_id` con constraint de unicidad.
-- **`dont_stop`**: `source`, `message`, `payload`, `created_at`.
-- **JWT** en cookies HTTP-only y `bcryptjs` para hashing.
-- Variables mínimas: `DATABASE_URL`, `JWT_SECRET`, `NEXT_PUBLIC_APP_URL`.
-
 ## Convenciones clave
 
-- Las rutas protegidas requieren autenticación.
-- Progress contextualizado por módulo y por usuario.
-- `SimulatedTerminal` incluye historial de comandos, `clear`, scroll y copiado.
-- Cada módulo tiene su propio esquema visual.
-- La documentación oficial se organiza por módulo y por contenido buscado.
-- El menú móvil usa overlay vertical para no romper el ancho de la página.
-- La suscripción de módulos se gestiona con tablas dedicadas y endpoints REST.
+- Las rutas protegidas requieren sesión autenticada.
+- El editor se guarda por módulo y usuario.
+- La práctica SQL es un entorno simulado, no una conexión a PostgreSQL real.
+- Los cambios del editor y del esquema SQL deben persistirse en navegador o backend según el caso.
+- Los resultados de compilación no deben duplicarse entre módulos: TypeScript tiene resultado debajo del editor; PostgreSQL tiene el resultado debajo del bloque de tablas.
+- La documentación y los prompts de IA deben basarse en contenido oficial y verificable.
 
 ## Rutas principales
 
 | Ruta | Tipo | Comentario |
 | --- | --- | --- |
-| `/` | Client Component | Dashboard |
-| `/docs` | Client Component | Docs con búsqueda y scraping |
-| `/challenges` | Client Component | Retos con bloqueo y paginación |
-| `/account` | Client Component | Perfil, nivel y suscripciones |
-| `/ssh` | Client Component | Terminal SSH |
-| `/docker` | Client Component | Terminal Docker |
-| `/postgres` | Client Component | Terminal PostgreSQL |
-| `/typescript` | Client Component | Editor TypeScript |
-| `/api/modules/available` | Route Handler | Módulos disponibles para el usuario |
-| `/api/modules/subscribe` | Route Handler | Guardado de suscripciones |
+| `/` | App Router | Dashboard |
+| `/challenges` | Client Page | Retos y bloqueo por semana |
+| `/docs` | Client Page | Documentación oficial |
+| `/account` | Client Page | Perfil, nivel, módulos |
+| `/ssh` | Client Page | Práctica SSH |
+| `/docker` | Client Page | Práctica Docker |
+| `/postgres` | Client Page | SQL interactivo |
+| `/typescript` | Client Page | Editor TypeScript |
+| `/login` | Client Page | Inicio de sesión |
+| `/register` | Client Page | Registro |
+| `/api/editor-workspace` | Route Handler | Guardado de archivos por módulo |
+| `/api/docs` | Route Handler | Búsqueda y render de docs |
+| `/api/modules/available` | Route Handler | Módulos disponibles |
+| `/api/modules/subscribe` | Route Handler | Suscripción |
+| `/api/chat` | Route Handler | Chat IA |
+
+## Persistencia y datos
+
+- El workspace del editor se guarda en la API protegida por sesión.
+- El estado de tablas SQL se persiste en `sessionStorage` y `localStorage`.
+- La aplicación está preparada para trabajar con módulos de usuario de forma granular.
+
+## Variables de entorno
+
+```env
+DATABASE_URL="..."
+JWT_SECRET="..."
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+```
 
 ## Comandos de ejecución
 
@@ -139,11 +139,19 @@ npm run start
 npm run lint
 ```
 
+## Verificación
+
+Se ha validado la compilación real con:
+
+```bash
+npm run build
+```
+
+Resultado verificado: compilación exitosa con Next.js 16.
+
 ## Notas importantes
 
-- La inteligencia de docs está enfocada en contenido oficial y relevante, no en enlaces sin contexto.
-- La búsqueda filtra por coincidencias reales del término buscado.
-- Los retos no permiten reintentos ilimitados ni saltos de semana sin completar la previa.
-- El proyecto fue ampliado con soporte de flujo de práctica para Next.js y TypeScript real.
-- El flujo de módulos está diseñado para ser configurable y persistente por usuario.
-- El proyecto está protegido por una licencia de uso restringido: no se permite reutilizar, clonar, redistribuir, modificar ni vender el código ni el contenido sin permiso explícito del propietario.
+- El proyecto usa una licencia de uso restringido.
+- La lógica de prácticas y retos está diseñada para ser extensible por módulo.
+- Los prompts y respuestas de IA deben mantenerse técnicos, limitados y verificables.
+- Si se modifica el editor o la estructura SQL, revisar la persistencia del estado para no romper la UX.
