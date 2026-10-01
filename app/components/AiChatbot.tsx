@@ -89,7 +89,7 @@ export default function AiChatbot() {
   });
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [currentModelName, setCurrentModelName] = useState<string>("gemini-3.7-flash");
+  const [currentModelName, setCurrentModelName] = useState<string>("gemini-3.7-flash-lite");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);

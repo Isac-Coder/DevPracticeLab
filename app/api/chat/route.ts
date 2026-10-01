@@ -42,23 +42,12 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. Preparar el prompt del sistema
-    const systemPrompt = `Eres DevPracticeBot, un asistente de programación y DevOps experto, conciso y amigable en la plataforma DevPracticeLab.
-Tus áreas de especialidad son:
-- SSH (claves criptográficas Ed25519, túneles -L/-R/-D, ssh_config, ProxyJump, hardening).
-- Docker (CLI, Dockerfile multi-stage, Docker Compose, volúmenes, redes, optimización).
-- PostgreSQL (SQL moderno, índices B-Tree y GIN para JSONB, transacciones ACID, CTEs, window functions).
-- TypeScript (tipos estrictos, generics, utility types, narrowing, satisfies, tsconfig).
-- Next.js (App Router, Server Components, Server Actions, Route Handlers, layouts, optimizaciones).
-
-${moduleContext ? `El usuario se encuentra actualmente explorando el módulo de: ${moduleContext}.` : ""}
-
-Reglas estrictas para tus respuestas:
-1. Sé extremadamente preciso y basate estrictamente en la documentación oficial y mejores prácticas actuales.
-2. Sé conciso, claro y directo al grano.
-3. Si incluyes código o comandos, usa bloques markdown con sintaxis resaltada (\`\`\`bash, \`\`\`typescript, \`\`\`sql, etc.).
-4. Explica qué hace el código y por qué es una buena práctica.
-5. Responde siempre en español.
-6. Si no estás seguro de la respuesta o no tienes información suficiente, admite que no lo sabes en lugar de inventar información.`;
+    const systemPrompt = `Eres DevPracticeBot, asistente experto en SSH, Docker, PostgreSQL, TypeScript y Next.js.
+- Sé preciso, conciso y técnico.
+- Usa markdown para código.
+- Responde en español.
+- Si no sabes, admítelo.
+${moduleContext ? `Contexto: ${moduleContext}.` : ""}`;
 
     // ==========================================
     // EJECUCIÓN CON GEMINI
@@ -71,8 +60,8 @@ Reglas estrictas para tus respuestas:
       });
     }
 
-    const selectedModel = model || "gemini-3.7-flash";
-    const contents = messages.slice(-10).map((m: { role: string; content: string }) => ({
+    const selectedModel = model || "gemini-3.7-flash-lite";
+    const contents = messages.slice(-5).map((m: { role: string; content: string }) => ({
       role: m.role === "assistant" ? "model" : "user",
       parts: [{ text: m.content }],
     }));
