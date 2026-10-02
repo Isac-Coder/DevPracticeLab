@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserAiConfigs } from "@/lib/db";
 import { getSession } from "@/lib/auth";
+import { isChallengeRelatedQuestion } from "@/lib/challengesData";
 
 export async function POST(req: NextRequest) {
   try {
@@ -11,6 +12,17 @@ export async function POST(req: NextRequest) {
         { error: "Mensajes requeridos" },
         { status: 400 }
       );
+    }
+
+    const lastUserMessage = [...messages]
+      .reverse()
+      .find((message) => message?.role === "user" && typeof message.content === "string");
+    if (lastUserMessage && isChallengeRelatedQuestion(lastUserMessage.content)) {
+      return NextResponse.json({
+        reply: "Haciendo trampa para completar un reto... ¡Qué mal! Intenta resolverlo por tu cuenta; puedo ayudarte con otros temas.",
+        provider: "challenge-guard",
+        needsKey: false,
+      });
     }
 
     // 1. Obtener la sesión del usuario para consultar su configuración en BD

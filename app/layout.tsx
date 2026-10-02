@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
 import { ProgressProvider } from "@/lib/ProgressContext";
+import { ChallengeModeProvider } from "@/lib/ChallengeModeContext";
 import AiChatbot from "@/app/components/AiChatbot";
 
 const geistSans = Geist({
@@ -34,8 +35,10 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col">
         <AuthProvider>
           <ProgressProvider>
-            {children}
-            <AiChatbot />
+            <ChallengeModeProvider>
+              {children}
+              <AiChatbot />
+            </ChallengeModeProvider>
           </ProgressProvider>
         </AuthProvider>
       </body>

@@ -56,7 +56,19 @@ declare global {
     updated_at: Date;
   }> | undefined;
   // eslint-disable-next-line no-var
+  var __mockChallengeCompletions: Array<{
+    user_id: string;
+    challenge_id: string;
+    status: ChallengeStatus;
+    xp_bonus: number;
+    points_earned: number;
+    elapsed_ms: number;
+    completed_at: Date;
+  }> | undefined;
+  // eslint-disable-next-line no-var
   var __schemaInitialized: boolean | undefined;
+  var __challengeStatusSchemaReady: boolean | undefined;
+  var __challengeLeaderboardSchemaReady: boolean | undefined;
 }
 
 function getConnectionString(): string {
@@ -95,6 +107,23 @@ if (!global.__mockAvailableModules) {
 if (!global.__mockUserSubscriptions) global.__mockUserSubscriptions = [];
 if (!global.__mockUserApiKeys) global.__mockUserApiKeys = [];
 if (!global.__mockEditorWorkspaces) global.__mockEditorWorkspaces = [];
+if (!global.__mockChallengeCompletions) global.__mockChallengeCompletions = [];
+
+export type ChallengeStatus = "resuelto" | "erroneo" | "faltante";
+
+export interface ChallengeLeaderboardEntry {
+  username: string;
+  completedChallenges: number;
+  points: number;
+  averageTimeMs: number | null;
+}
+
+export class DatabaseUnavailableError extends Error {
+  constructor() {
+    super("No se pudo establecer conexión con la base de datos.");
+    this.name = "DatabaseUnavailableError";
+  }
+}
 
 export interface EditorWorkspaceFile {
   id: string;
@@ -187,6 +216,96 @@ export async function initDatabase() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (user_id, module_key)
       );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_challenge_completions (
+        user_id TEXT NOT NULL,
+        challenge_id VARCHAR(100) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'resuelto'
+          CHECK (status IN ('resuelto', 'erroneo', 'faltante')),
+        xp_bonus INTEGER NOT NULL DEFAULT 0 CHECK (xp_bonus >= 0),
+        points_earned INTEGER NOT NULL DEFAULT 0 CHECK (points_earned >= 0),
+        elapsed_ms BIGINT NOT NULL DEFAULT 0 CHECK (elapsed_ms >= 0),
+        completed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, challenge_id)
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_challenge_leaderboard (
+        user_id TEXT PRIMARY KEY,
+        username VARCHAR(100) NOT NULL DEFAULT 'Usuario',
+        points BIGINT NOT NULL DEFAULT 0 CHECK (points >= 0),
+        completed_challenges INTEGER NOT NULL DEFAULT 0 CHECK (completed_challenges >= 0),
+        total_elapsed_ms BIGINT NOT NULL DEFAULT 0 CHECK (total_elapsed_ms >= 0),
+        timed_challenges INTEGER NOT NULL DEFAULT 0 CHECK (timed_challenges >= 0),
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await client.query(`
+      ALTER TABLE user_challenge_completions
+      ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'resuelto';
+    `);
+    await client.query(`
+      ALTER TABLE user_challenge_completions
+      ADD COLUMN IF NOT EXISTS xp_bonus INTEGER NOT NULL DEFAULT 0;
+    `);
+    await client.query(`
+      ALTER TABLE user_challenge_completions
+      ADD COLUMN IF NOT EXISTS points_earned INTEGER NOT NULL DEFAULT 0;
+    `);
+    await client.query(`
+      ALTER TABLE user_challenge_completions
+      ADD COLUMN IF NOT EXISTS elapsed_ms BIGINT NOT NULL DEFAULT 0;
+    `);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'user_challenge_completions_xp_bonus_check'
+        ) THEN
+          ALTER TABLE user_challenge_completions
+          ADD CONSTRAINT user_challenge_completions_xp_bonus_check
+          CHECK (xp_bonus >= 0);
+        END IF;
+      END $$;
+    `);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'user_challenge_completions_points_earned_check'
+        ) THEN
+          ALTER TABLE user_challenge_completions
+          ADD CONSTRAINT user_challenge_completions_points_earned_check
+          CHECK (points_earned >= 0);
+        END IF;
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'user_challenge_completions_elapsed_ms_check'
+        ) THEN
+          ALTER TABLE user_challenge_completions
+          ADD CONSTRAINT user_challenge_completions_elapsed_ms_check
+          CHECK (elapsed_ms >= 0);
+        END IF;
+      END $$;
+    `);
+    await client.query(`
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'user_challenge_completions_status_check'
+        ) THEN
+          ALTER TABLE user_challenge_completions
+          ADD CONSTRAINT user_challenge_completions_status_check
+          CHECK (status IN ('resuelto', 'erroneo', 'faltante'));
+        END IF;
+      END $$;
     `);
 
     await client.query(`
@@ -310,6 +429,8 @@ export async function initDatabase() {
 
     await client.query("COMMIT");
     global.__schemaInitialized = true;
+    global.__challengeStatusSchemaReady = true;
+    global.__challengeLeaderboardSchemaReady = true;
     console.log("✅ Supabase PostgreSQL: Tablas verificadas y creadas correctamente.");
   } catch (error) {
     try {
@@ -630,6 +751,419 @@ export async function query(text: string, params?: unknown[]) {
   await initDatabase();
   const pool = getPool();
   return pool.query(text, params);
+}
+
+export async function getChallengeStatuses(
+  userId: number | string
+): Promise<Record<string, ChallengeStatus>> {
+  if (getConnectionString()) {
+    await initDatabase();
+    await ensureChallengeStatusTable();
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT challenge_id, status
+       FROM user_challenge_completions
+       WHERE user_id = $1
+       ORDER BY completed_at ASC`,
+      [String(userId)]
+    );
+    return Object.fromEntries(
+      result.rows.map((row) => [row.challenge_id as string, row.status as ChallengeStatus])
+    );
+  }
+
+  return Object.fromEntries(
+    global.__mockChallengeCompletions!
+      .filter((entry) => entry.user_id === String(userId))
+      .map((entry) => [entry.challenge_id, entry.status])
+  );
+}
+
+export async function getChallengeBonusXp(
+  userId: number | string
+): Promise<Record<string, number>> {
+  if (getConnectionString()) {
+    await initDatabase();
+    await ensureChallengeStatusTable();
+    const pool = getPool();
+    const result = await pool.query(
+      `SELECT challenge_id, xp_bonus
+       FROM user_challenge_completions
+       WHERE user_id = $1`,
+      [String(userId)]
+    );
+    return Object.fromEntries(
+      result.rows.map((row) => [row.challenge_id as string, Number(row.xp_bonus)])
+    );
+  }
+
+  return Object.fromEntries(
+    global.__mockChallengeCompletions!
+      .filter((entry) => entry.user_id === String(userId))
+      .map((entry) => [entry.challenge_id, entry.xp_bonus])
+  );
+}
+
+export async function ensureChallengeStatusRows(
+  userId: number | string,
+  challengeIds: string[]
+): Promise<void> {
+  if (getConnectionString()) {
+    await initDatabase();
+    await ensureChallengeStatusTable();
+    const pool = getPool();
+    await pool.query(
+      `INSERT INTO user_challenge_completions (user_id, challenge_id, status)
+       SELECT $1, ids.challenge_id, 'faltante'
+       FROM UNNEST($2::varchar[]) AS ids(challenge_id)
+       ON CONFLICT (user_id, challenge_id) DO NOTHING`,
+      [String(userId), challengeIds]
+    );
+    return;
+  }
+
+  for (const challengeId of challengeIds) {
+    const alreadyTracked = global.__mockChallengeCompletions!.some(
+      (entry) => entry.user_id === String(userId) && entry.challenge_id === challengeId
+    );
+    if (!alreadyTracked) {
+      global.__mockChallengeCompletions!.push({
+        user_id: String(userId),
+        challenge_id: challengeId,
+        status: "faltante",
+        xp_bonus: 0,
+        points_earned: 0,
+        elapsed_ms: 0,
+        completed_at: new Date(),
+      });
+    }
+  }
+}
+
+export async function setChallengeStatus(
+  userId: number | string,
+  challengeId: string,
+  status: ChallengeStatus,
+  xpBonus = 0,
+  pointsEarned = 0,
+  elapsedMs = 0
+): Promise<void> {
+  if (getConnectionString()) {
+    await initDatabase();
+    await ensureChallengeStatusTable();
+    const pool = getPool();
+    await pool.query(
+      `INSERT INTO user_challenge_completions (
+         user_id, challenge_id, status, xp_bonus, points_earned, elapsed_ms, completed_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, challenge_id)
+       DO UPDATE SET status = EXCLUDED.status,
+                     xp_bonus = EXCLUDED.xp_bonus,
+                     points_earned = EXCLUDED.points_earned,
+                     elapsed_ms = EXCLUDED.elapsed_ms,
+                     completed_at = CURRENT_TIMESTAMP`,
+      [String(userId), challengeId, status, xpBonus, pointsEarned, elapsedMs]
+    );
+    return;
+  }
+
+  const record = global.__mockChallengeCompletions!.find(
+    (entry) => entry.user_id === String(userId) && entry.challenge_id === challengeId
+  );
+  if (record) {
+    record.status = status;
+    record.xp_bonus = xpBonus;
+    record.points_earned = pointsEarned;
+    record.elapsed_ms = elapsedMs;
+    record.completed_at = new Date();
+  } else {
+    global.__mockChallengeCompletions!.push({
+      user_id: String(userId),
+      challenge_id: challengeId,
+      status,
+      xp_bonus: xpBonus,
+      points_earned: pointsEarned,
+      elapsed_ms: elapsedMs,
+      completed_at: new Date(),
+    });
+  }
+}
+
+async function ensureChallengeStatusTable() {
+  if (global.__challengeStatusSchemaReady) return;
+
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_challenge_completions (
+      user_id TEXT NOT NULL,
+      challenge_id VARCHAR(100) NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'resuelto'
+        CHECK (status IN ('resuelto', 'erroneo', 'faltante')),
+      xp_bonus INTEGER NOT NULL DEFAULT 0 CHECK (xp_bonus >= 0),
+        points_earned INTEGER NOT NULL DEFAULT 0 CHECK (points_earned >= 0),
+        elapsed_ms BIGINT NOT NULL DEFAULT 0 CHECK (elapsed_ms >= 0),
+        completed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, challenge_id)
+    );
+  `);
+  await pool.query(`
+    ALTER TABLE user_challenge_completions
+    ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'resuelto';
+  `);
+  await pool.query(`
+    ALTER TABLE user_challenge_completions
+    ADD COLUMN IF NOT EXISTS xp_bonus INTEGER NOT NULL DEFAULT 0;
+  `);
+  await pool.query(`
+    ALTER TABLE user_challenge_completions
+    ADD COLUMN IF NOT EXISTS points_earned INTEGER NOT NULL DEFAULT 0;
+  `);
+  await pool.query(`
+    ALTER TABLE user_challenge_completions
+    ADD COLUMN IF NOT EXISTS elapsed_ms BIGINT NOT NULL DEFAULT 0;
+  `);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'user_challenge_completions_xp_bonus_check'
+      ) THEN
+        ALTER TABLE user_challenge_completions
+        ADD CONSTRAINT user_challenge_completions_xp_bonus_check
+        CHECK (xp_bonus >= 0);
+      END IF;
+    END $$;
+  `);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'user_challenge_completions_status_check'
+      ) THEN
+        ALTER TABLE user_challenge_completions
+        ADD CONSTRAINT user_challenge_completions_status_check
+        CHECK (status IN ('resuelto', 'erroneo', 'faltante'));
+      END IF;
+    END $$;
+  `);
+  await pool.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'user_challenge_completions_points_earned_check'
+      ) THEN
+        ALTER TABLE user_challenge_completions
+        ADD CONSTRAINT user_challenge_completions_points_earned_check
+        CHECK (points_earned >= 0);
+      END IF;
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'user_challenge_completions_elapsed_ms_check'
+      ) THEN
+        ALTER TABLE user_challenge_completions
+        ADD CONSTRAINT user_challenge_completions_elapsed_ms_check
+        CHECK (elapsed_ms >= 0);
+      END IF;
+    END $$;
+  `);
+  global.__challengeStatusSchemaReady = true;
+}
+
+export async function getChallengeLeaderboard(
+  challenges: Array<{ id: string; xp: number }>
+): Promise<ChallengeLeaderboardEntry[]> {
+  const challengeXp = new Map(challenges.map((challenge) => [challenge.id, challenge.xp]));
+
+  if (!getConnectionString()) {
+    const totals = new Map<string, {
+      username: string;
+      points: number;
+      completedChallenges: number;
+      totalElapsedMs: number;
+      timedChallenges: number;
+    }>();
+
+    for (const completion of global.__mockChallengeCompletions!) {
+      if (completion.status !== "resuelto") continue;
+      const userId = completion.user_id;
+      const user = global.__mockUsers!.find((item) => String(item.id) === userId);
+      const current = totals.get(userId) ?? {
+        username: user?.username ?? "Usuario",
+        points: 0,
+        completedChallenges: 0,
+        totalElapsedMs: 0,
+        timedChallenges: 0,
+      };
+      current.points += completion.points_earned || (challengeXp.get(completion.challenge_id) ?? 0) + completion.xp_bonus;
+      current.completedChallenges += 1;
+      if (completion.elapsed_ms > 0) {
+        current.totalElapsedMs += completion.elapsed_ms;
+        current.timedChallenges += 1;
+      }
+      totals.set(userId, current);
+    }
+
+    return sortChallengeLeaderboard([...totals.values()].map((entry) => ({
+      username: entry.username,
+      completedChallenges: entry.completedChallenges,
+      points: entry.points,
+      averageTimeMs: entry.timedChallenges > 0 ? entry.totalElapsedMs / entry.timedChallenges : null,
+    })));
+  }
+
+  await initDatabase();
+  if (!global.__schemaInitialized) {
+    throw new DatabaseUnavailableError();
+  }
+  await ensureChallengeStatusTable();
+  await ensureChallengeLeaderboardTable();
+
+  const pool = getPool();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const completionResult = await client.query(
+      `SELECT
+         completion.user_id,
+         users.username,
+         completion.challenge_id,
+         completion.xp_bonus,
+         completion.points_earned,
+         completion.elapsed_ms
+       FROM user_challenge_completions AS completion
+       LEFT JOIN users ON users.id::text = completion.user_id
+       WHERE completion.status = 'resuelto'`
+    );
+    const totals = new Map<string, {
+      username: string;
+      points: number;
+      completedChallenges: number;
+      totalElapsedMs: number;
+      timedChallenges: number;
+    }>();
+
+    for (const row of completionResult.rows) {
+      const userId = String(row.user_id);
+      const current = totals.get(userId) ?? {
+        username: typeof row.username === "string" ? row.username : "Usuario",
+        points: 0,
+        completedChallenges: 0,
+        totalElapsedMs: 0,
+        timedChallenges: 0,
+      };
+      const pointsEarned = Number(row.points_earned);
+      current.points += pointsEarned > 0
+        ? pointsEarned
+        : (challengeXp.get(String(row.challenge_id)) ?? 0) + Number(row.xp_bonus);
+      current.completedChallenges += 1;
+      const elapsedMs = Number(row.elapsed_ms);
+      if (elapsedMs > 0) {
+        current.totalElapsedMs += elapsedMs;
+        current.timedChallenges += 1;
+      }
+      totals.set(userId, current);
+    }
+
+    await client.query(
+      `UPDATE user_challenge_leaderboard
+       SET points = 0,
+           completed_challenges = 0,
+           total_elapsed_ms = 0,
+           timed_challenges = 0,
+           updated_at = CURRENT_TIMESTAMP`
+    );
+
+    if (totals.size > 0) {
+      const entries = [...totals.entries()];
+      await client.query(
+        `INSERT INTO user_challenge_leaderboard (
+           user_id, username, points, completed_challenges, total_elapsed_ms, timed_challenges, updated_at
+         )
+         SELECT user_id, username, points, completed_challenges, total_elapsed_ms, timed_challenges, CURRENT_TIMESTAMP
+         FROM UNNEST(
+           $1::text[],
+           $2::varchar[],
+           $3::bigint[],
+           $4::integer[],
+           $5::bigint[],
+           $6::integer[]
+         ) AS leaderboard_rows(user_id, username, points, completed_challenges, total_elapsed_ms, timed_challenges)
+         ON CONFLICT (user_id)
+         DO UPDATE SET username = EXCLUDED.username,
+                       points = EXCLUDED.points,
+                       completed_challenges = EXCLUDED.completed_challenges,
+                       total_elapsed_ms = EXCLUDED.total_elapsed_ms,
+                       timed_challenges = EXCLUDED.timed_challenges,
+                       updated_at = CURRENT_TIMESTAMP`,
+        [
+          entries.map(([userId]) => userId),
+          entries.map(([, entry]) => entry.username),
+          entries.map(([, entry]) => entry.points),
+          entries.map(([, entry]) => entry.completedChallenges),
+          entries.map(([, entry]) => entry.totalElapsedMs),
+          entries.map(([, entry]) => entry.timedChallenges),
+        ]
+      );
+    }
+
+    const leaderboardResult = await client.query(
+      `SELECT
+         username,
+         completed_challenges,
+         points,
+         CASE
+           WHEN timed_challenges > 0 THEN total_elapsed_ms::numeric / timed_challenges
+           ELSE NULL
+         END AS average_time_ms
+       FROM user_challenge_leaderboard
+       WHERE completed_challenges > 0
+       ORDER BY points DESC, completed_challenges DESC, average_time_ms ASC NULLS LAST, username ASC`
+    );
+    await client.query("COMMIT");
+
+    return leaderboardResult.rows.map((row) => ({
+      username: String(row.username),
+      completedChallenges: Number(row.completed_challenges),
+      points: Number(row.points),
+      averageTimeMs: row.average_time_ms === null ? null : Number(row.average_time_ms),
+    }));
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function sortChallengeLeaderboard(entries: ChallengeLeaderboardEntry[]): ChallengeLeaderboardEntry[] {
+  return entries.sort((a, b) =>
+    b.points - a.points ||
+    b.completedChallenges - a.completedChallenges ||
+    (a.averageTimeMs ?? Number.POSITIVE_INFINITY) - (b.averageTimeMs ?? Number.POSITIVE_INFINITY) ||
+    a.username.localeCompare(b.username)
+  );
+}
+
+async function ensureChallengeLeaderboardTable() {
+  if (global.__challengeLeaderboardSchemaReady) return;
+
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_challenge_leaderboard (
+      user_id TEXT PRIMARY KEY,
+      username VARCHAR(100) NOT NULL DEFAULT 'Usuario',
+      points BIGINT NOT NULL DEFAULT 0 CHECK (points >= 0),
+      completed_challenges INTEGER NOT NULL DEFAULT 0 CHECK (completed_challenges >= 0),
+      total_elapsed_ms BIGINT NOT NULL DEFAULT 0 CHECK (total_elapsed_ms >= 0),
+      timed_challenges INTEGER NOT NULL DEFAULT 0 CHECK (timed_challenges >= 0),
+      updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+  global.__challengeLeaderboardSchemaReady = true;
 }
 
 async function ensureEditorWorkspaceTable() {

@@ -42,6 +42,21 @@ body {
   51%, 100% { opacity: 0; }
 }
 
+@keyframes challenge-expand {
+  from {
+    opacity: 0;
+    transform: scale(0.88) translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-challenge-expand {
+  animation: challenge-expand 280ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
 input:focus {
   caret-color: currentColor;
 }

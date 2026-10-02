@@ -23,19 +23,44 @@ import {
   Filter,
   Check,
   RotateCcw,
+  ArrowLeft,
 } from "lucide-react";
 import Navbar from "@/app/components/Navbar";
 import { useAuth } from "@/lib/AuthContext";
 import {
   ALL_CHALLENGES,
+  calculateSpeedBonusXp,
+  type ChallengeStatus,
   getCurrentCalendarWeek,
   type Challenge,
 } from "@/lib/challengesData";
 import { calculateAccountLevel } from "@/lib/accountLevel";
+import { useChallengeMode } from "@/lib/ChallengeModeContext";
+
+interface ChallengeTimerRecord {
+  elapsedMs: number;
+  startedAt: number | null;
+  finished: boolean;
+}
+
+const formatElapsedTime = (elapsedMs: number) => {
+  const totalSeconds = Math.floor(elapsedMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+  const seconds = (totalSeconds % 60).toString().padStart(2, "0");
+  return `${minutes}:${seconds}`;
+};
 
 export default function ChallengesPage() {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { setChallengeActive } = useChallengeMode();
   const [completedList, setCompletedList] = useState<string[]>([]);
+  const [challengeStatuses, setChallengeStatuses] = useState<Record<string, ChallengeStatus>>({});
+  const [bonusXpByChallenge, setBonusXpByChallenge] = useState<Record<string, number>>({});
+  const [timerRecords, setTimerRecords] = useState<Record<string, ChallengeTimerRecord>>({});
+  const [timerNow, setTimerNow] = useState(Date.now());
+  const [completionsLoading, setCompletionsLoading] = useState(true);
+  const [completionError, setCompletionError] = useState<string | null>(null);
+  const [selectedChallengeId, setSelectedChallengeId] = useState<string | null>(null);
   const [lockedChallenges, setLockedChallenges] = useState<string[]>([]);
   const [activeHint, setActiveHint] = useState<Record<string, boolean>>({});
   const [showSolution, setShowSolution] = useState<Record<string, boolean>>({});
@@ -51,9 +76,264 @@ export default function ChallengesPage() {
   const [selectedWeek, setSelectedWeek] = useState<number>(getCurrentCalendarWeek());
 
   const currentCalendarWeek = useMemo(() => getCurrentCalendarWeek(), []);
-  const storageKey = user ? `devpracticelab_challenges_${user.email}` : "devpracticelab_challenges_guest";
+  const userEmail = user?.email;
+  const storageKey = userEmail ? `devpracticelab_challenges_${userEmail}` : "devpracticelab_challenges_guest";
+  const statusStorageKey = `${storageKey}_statuses`;
+  const bonusXpStorageKey = `${storageKey}_bonus_xp`;
+  const timerStorageKey = `${storageKey}_timers`;
   const lockedStorageKey = `${storageKey}_locked`;
   const PAGE_SIZE = 6;
+
+  useEffect(() => {
+    setChallengeActive(selectedChallengeId !== null);
+  }, [selectedChallengeId, setChallengeActive]);
+
+  useEffect(() => () => setChallengeActive(false), [setChallengeActive]);
+
+  useEffect(() => {
+    if (!selectedChallengeId) return;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setChallengeActive(false);
+        setSelectedChallengeId(null);
+      }
+    };
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [selectedChallengeId]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    try {
+      const savedTimers = localStorage.getItem(timerStorageKey);
+      const parsedTimers: unknown = savedTimers ? JSON.parse(savedTimers) : {};
+      if (typeof parsedTimers === "object" && parsedTimers !== null) {
+        const restoredTimers: Record<string, ChallengeTimerRecord> = {};
+        for (const [challengeId, timer] of Object.entries(parsedTimers)) {
+          if (
+            ALL_CHALLENGES.some((challenge) => challenge.id === challengeId) &&
+            typeof timer === "object" &&
+            timer !== null &&
+            "elapsedMs" in timer &&
+            typeof timer.elapsedMs === "number" &&
+            "finished" in timer &&
+            typeof timer.finished === "boolean"
+          ) {
+            restoredTimers[challengeId] = {
+              elapsedMs: Math.max(0, timer.elapsedMs),
+              startedAt: null,
+              finished: timer.finished,
+            };
+          }
+        }
+        setTimerRecords(restoredTimers);
+      }
+    } catch (error) {
+      console.error("No se pudieron cargar los temporizadores de retos:", error);
+    }
+  }, [authLoading, timerStorageKey]);
+
+  useEffect(() => {
+    if (!selectedChallengeId) return;
+
+    const challengeId = selectedChallengeId;
+    const startedAt = Date.now();
+    setTimerRecords((previous) => {
+      const current = previous[challengeId] ?? { elapsedMs: 0, startedAt: null, finished: false };
+      if (current.finished) return previous;
+      const next = { ...previous, [challengeId]: { ...current, startedAt } };
+      try {
+        localStorage.setItem(
+          timerStorageKey,
+          JSON.stringify({
+            ...next,
+            [challengeId]: { ...next[challengeId], startedAt: null },
+          }),
+        );
+      } catch (error) {
+        console.error("No se pudo guardar el temporizador del reto:", error);
+      }
+      return next;
+    });
+
+    const interval = window.setInterval(() => {
+      const now = Date.now();
+      setTimerNow(now);
+      setTimerRecords((current) => {
+        const timer = current[challengeId];
+        if (!timer || timer.finished || timer.startedAt === null) return current;
+        try {
+          localStorage.setItem(
+            timerStorageKey,
+            JSON.stringify({
+              ...current,
+              [challengeId]: {
+                ...timer,
+                elapsedMs: timer.elapsedMs + now - timer.startedAt,
+                startedAt: null,
+              },
+            }),
+          );
+        } catch (error) {
+          console.error("No se pudo persistir el tiempo del reto:", error);
+        }
+        return current;
+      });
+    }, 1000);
+
+    return () => {
+      window.clearInterval(interval);
+      setTimerRecords((previous) => {
+        const current = previous[challengeId];
+        if (!current || current.startedAt === null || current.finished) return previous;
+        const next = {
+          ...previous,
+          [challengeId]: {
+            ...current,
+            elapsedMs: current.elapsedMs + Date.now() - current.startedAt,
+            startedAt: null,
+          },
+        };
+        try {
+          localStorage.setItem(timerStorageKey, JSON.stringify(next));
+        } catch (error) {
+          console.error("No se pudo pausar el temporizador del reto:", error);
+        }
+        return next;
+      });
+    };
+  }, [selectedChallengeId, timerStorageKey]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
+    let cancelled = false;
+    const loadCompletions = async () => {
+      setCompletionsLoading(true);
+      setCompletionError(null);
+      let localCompleted: string[] = [];
+      let localStatuses: Record<string, ChallengeStatus> = {};
+      let localBonusXp: Record<string, number> = {};
+      try {
+        const saved = localStorage.getItem(storageKey);
+        const parsed: unknown = saved ? JSON.parse(saved) : [];
+        if (Array.isArray(parsed)) {
+          localCompleted = parsed.filter(
+            (id): id is string =>
+              typeof id === "string" && ALL_CHALLENGES.some((challenge) => challenge.id === id),
+          );
+        }
+        const savedStatuses = localStorage.getItem(statusStorageKey);
+        const parsedStatuses: unknown = savedStatuses ? JSON.parse(savedStatuses) : {};
+        if (typeof parsedStatuses === "object" && parsedStatuses !== null) {
+          for (const [challengeId, status] of Object.entries(parsedStatuses)) {
+            if (
+              ALL_CHALLENGES.some((challenge) => challenge.id === challengeId) &&
+              (status === "resuelto" || status === "erroneo" || status === "faltante")
+            ) {
+              localStatuses[challengeId] = status;
+            }
+          }
+        }
+        for (const challengeId of localCompleted) localStatuses[challengeId] = "resuelto";
+        const savedBonusXp = localStorage.getItem(bonusXpStorageKey);
+        const parsedBonusXp: unknown = savedBonusXp ? JSON.parse(savedBonusXp) : {};
+        if (typeof parsedBonusXp === "object" && parsedBonusXp !== null) {
+          for (const [challengeId, bonus] of Object.entries(parsedBonusXp)) {
+            if (
+              ALL_CHALLENGES.some((challenge) => challenge.id === challengeId) &&
+              typeof bonus === "number" &&
+              Number.isFinite(bonus) &&
+              bonus >= 0
+            ) {
+              localBonusXp[challengeId] = bonus;
+            }
+          }
+        }
+
+        if (userEmail) {
+          const response = await fetch("/api/challenges/completions");
+          const data = await response.json();
+          if (
+            !response.ok ||
+            typeof data.statuses !== "object" ||
+            data.statuses === null ||
+            typeof data.bonusXP !== "object" ||
+            data.bonusXP === null
+          ) {
+            throw new Error(data.error || "No se pudo cargar el progreso de retos.");
+          }
+
+          const persistedStatuses = data.statuses as Record<string, ChallengeStatus>;
+          const persistedBonusXp = data.bonusXP as Record<string, number>;
+          const missingIds = localCompleted.filter((id) => persistedStatuses[id] !== "resuelto");
+          if (missingIds.length > 0) {
+            const migrationResponse = await fetch("/api/challenges/completions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ challengeIds: missingIds }),
+            });
+            const migrationData = await migrationResponse.json();
+            if (
+              !migrationResponse.ok ||
+              typeof migrationData.statuses !== "object" ||
+              migrationData.statuses === null ||
+              typeof migrationData.bonusXP !== "object" ||
+              migrationData.bonusXP === null
+            ) {
+              throw new Error(migrationData.error || "No se pudo migrar el progreso de retos.");
+            }
+            Object.assign(persistedStatuses, migrationData.statuses);
+            Object.assign(persistedBonusXp, migrationData.bonusXP);
+          }
+          for (const challengeId of localCompleted) persistedStatuses[challengeId] = "resuelto";
+          localStatuses = { ...localStatuses, ...persistedStatuses };
+          localBonusXp = { ...localBonusXp, ...persistedBonusXp };
+        }
+
+        if (!cancelled) {
+          for (const challenge of ALL_CHALLENGES) {
+            localStatuses[challenge.id] ??= "faltante";
+          }
+          localCompleted = ALL_CHALLENGES
+            .filter((challenge) => localStatuses[challenge.id] === "resuelto")
+            .map((challenge) => challenge.id);
+          setCompletedList(localCompleted);
+          setChallengeStatuses(localStatuses);
+          setBonusXpByChallenge(localBonusXp);
+          localStorage.setItem(storageKey, JSON.stringify(localCompleted));
+          localStorage.setItem(statusStorageKey, JSON.stringify(localStatuses));
+          localStorage.setItem(bonusXpStorageKey, JSON.stringify(localBonusXp));
+        }
+      } catch (error) {
+        console.error("Error al cargar progreso de retos:", error);
+        if (!cancelled) {
+          for (const challenge of ALL_CHALLENGES) {
+            localStatuses[challenge.id] ??= "faltante";
+          }
+          localCompleted = ALL_CHALLENGES
+            .filter((challenge) => localStatuses[challenge.id] === "resuelto")
+            .map((challenge) => challenge.id);
+          setCompletedList(localCompleted);
+          setChallengeStatuses(localStatuses);
+          setBonusXpByChallenge(localBonusXp);
+          setCompletionError(error instanceof Error ? error.message : "No se pudo cargar el progreso de retos.");
+        }
+      } finally {
+        if (!cancelled) setCompletionsLoading(false);
+      }
+    };
+
+    loadCompletions();
+    return () => {
+      cancelled = true;
+    };
+  }, [authLoading, storageKey, statusStorageKey, bonusXpStorageKey, userEmail]);
 
   const getUnlockedWeekForModule = (moduleName: string) => {
     const targetModules = moduleName === "all" ? ["ssh", "docker", "postgres", "typescript"] : [moduleName];
@@ -80,14 +360,8 @@ export default function ChallengesPage() {
   const pendingWeek = useMemo(() => Math.min(currentCalendarWeek, maxUnlockedWeek), [currentCalendarWeek, maxUnlockedWeek]);
 
   useEffect(() => {
+    if (authLoading) return;
     try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        setCompletedList(JSON.parse(saved));
-      } else {
-        setCompletedList([]);
-      }
-
       const savedLocked = localStorage.getItem(lockedStorageKey);
       if (savedLocked) {
         setLockedChallenges(JSON.parse(savedLocked));
@@ -95,20 +369,76 @@ export default function ChallengesPage() {
         setLockedChallenges([]);
       }
     } catch {
-      setCompletedList([]);
       setLockedChallenges([]);
     }
-  }, [storageKey, lockedStorageKey]);
+  }, [authLoading, storageKey, lockedStorageKey]);
 
-  const markCompleted = (challengeId: string) => {
-    if (completedList.includes(challengeId)) return;
-    const next = [...completedList, challengeId];
-    setCompletedList(next);
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(next));
-    } catch (e) {
-      console.error(e);
+  const saveChallengeStatus = async (
+    challengeId: string,
+    status: ChallengeStatus,
+    elapsedMs = 0,
+    baseXp = 0,
+    answer = "",
+  ) => {
+    let earnedBonus = status === "resuelto" ? calculateSpeedBonusXp(baseXp, elapsedMs) : 0;
+    if (userEmail) {
+      try {
+        const response = await fetch("/api/challenges/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ challengeId, status, elapsedMs, answer }),
+        });
+        const data = await response.json();
+        if (
+          !response.ok ||
+          !data.success ||
+          typeof data.bonusXP?.[challengeId] !== "number"
+        ) {
+          throw new Error(data.error || "No se pudo guardar el estado del reto.");
+        }
+        earnedBonus = data.bonusXP[challengeId];
+      } catch (error) {
+        console.error("Error al guardar el estado del reto:", error);
+        setCompletionError(error instanceof Error ? error.message : "No se pudo guardar el estado del reto.");
+        return false;
+      }
     }
+
+    const nextStatuses = { ...challengeStatuses, [challengeId]: status };
+    const nextBonusXp = { ...bonusXpByChallenge, [challengeId]: earnedBonus };
+    const nextCompleted = ALL_CHALLENGES
+      .filter((challenge) => nextStatuses[challenge.id] === "resuelto")
+      .map((challenge) => challenge.id);
+    setChallengeStatuses(nextStatuses);
+    setBonusXpByChallenge(nextBonusXp);
+    setCompletedList(nextCompleted);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(nextCompleted));
+      localStorage.setItem(statusStorageKey, JSON.stringify(nextStatuses));
+      localStorage.setItem(bonusXpStorageKey, JSON.stringify(nextBonusXp));
+    } catch (e) {
+      console.error("No se pudo actualizar la copia local del estado de retos:", e);
+    }
+    if (status === "resuelto") {
+      setTimerRecords((previous) => {
+        const current = previous[challengeId] ?? { elapsedMs, startedAt: null, finished: true };
+        const finishedTimer = {
+          ...current,
+          elapsedMs,
+          startedAt: null,
+          finished: true,
+        };
+        const next = { ...previous, [challengeId]: finishedTimer };
+        try {
+          localStorage.setItem(timerStorageKey, JSON.stringify(next));
+        } catch (error) {
+          console.error("No se pudo guardar el tiempo final del reto:", error);
+        }
+        return next;
+      });
+    }
+    setCompletionError(null);
+    return true;
   };
 
   const lockChallenge = (challengeId: string) => {
@@ -123,11 +453,16 @@ export default function ChallengesPage() {
   };
 
   const isChallengeActive = (challenge: Challenge) => {
-    if (completedList.includes(challenge.id) || lockedChallenges.includes(challenge.id)) return false;
+    if (
+      completionsLoading ||
+      authLoading ||
+      completedList.includes(challenge.id) ||
+      lockedChallenges.includes(challenge.id)
+    ) return false;
     return challenge.week === pendingWeek;
   };
 
-  const handleTestAnswer = (challenge: Challenge) => {
+  const handleTestAnswer = async (challenge: Challenge) => {
     if (completedList.includes(challenge.id) || lockedChallenges.includes(challenge.id)) {
       setShowSolution((prev) => ({ ...prev, [challenge.id]: true }));
       return;
@@ -159,14 +494,35 @@ export default function ChallengesPage() {
     const hasTagsMatch = challenge.tags.some((t) => input.includes(t.toLowerCase()));
 
     if (matchesExpected || (input.length > 6 && hasTagsMatch)) {
+      const timer = timerRecords[challenge.id];
+      const elapsedMs = timer
+        ? timer.elapsedMs + (timer.startedAt === null ? 0 : Date.now() - timer.startedAt)
+        : 0;
+      const earnedSpeedBonus = calculateSpeedBonusXp(challenge.xp, elapsedMs);
+      const saved = await saveChallengeStatus(
+        challenge.id,
+        "resuelto",
+        elapsedMs,
+        challenge.xp,
+        input,
+      );
+      if (!saved) {
+        setEvalResults((prev) => ({
+          ...prev,
+          [challenge.id]: {
+            ok: false,
+            msg: "No se pudo guardar tu progreso. Revisa el aviso de estado y vuelve a intentarlo.",
+          },
+        }));
+        return;
+      }
       setShowSolution((prev) => ({ ...prev, [challenge.id]: true }));
       setAttemptsByChallenge((prev) => ({ ...prev, [challenge.id]: 0 }));
-      markCompleted(challenge.id);
       setEvalResults((prev) => ({
         ...prev,
         [challenge.id]: {
           ok: true,
-          msg: `¡Reto completado con éxito! Has ganado +${challenge.xp} XP y subido tu puntuación de cuenta.`,
+          msg: `¡Reto completado con éxito! Has ganado +${challenge.xp + earnedSpeedBonus} XP, incluyendo +${earnedSpeedBonus} XP por velocidad.`,
         },
       }));
       return;
@@ -175,6 +531,17 @@ export default function ChallengesPage() {
     const previousAttempts = attemptsByChallenge[challenge.id] ?? 0;
     const nextAttempts = previousAttempts + 1;
     setAttemptsByChallenge((prev) => ({ ...prev, [challenge.id]: nextAttempts }));
+    const savedErrorStatus = await saveChallengeStatus(challenge.id, "erroneo");
+    if (!savedErrorStatus) {
+      setEvalResults((prev) => ({
+        ...prev,
+        [challenge.id]: {
+          ok: false,
+          msg: "Respuesta incorrecta. No se pudo guardar el estado; revisa el aviso e inténtalo de nuevo.",
+        },
+      }));
+      return;
+    }
 
     if (nextAttempts >= 3) {
       setShowSolution((prev) => ({ ...prev, [challenge.id]: true }));
@@ -201,9 +568,9 @@ export default function ChallengesPage() {
   const totalXP = useMemo(() => {
     return completedList.reduce((acc, id) => {
       const ch = ALL_CHALLENGES.find((c) => c.id === id);
-      return acc + (ch ? ch.xp : 0);
+      return acc + (ch ? ch.xp + (bonusXpByChallenge[id] ?? 0) : 0);
     }, 0);
-  }, [completedList]);
+  }, [completedList, bonusXpByChallenge]);
 
   const accountLevel = useMemo(() => {
     return calculateAccountLevel(completedList.length, totalXP);
@@ -499,30 +866,100 @@ export default function ChallengesPage() {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-6">
           <div className="mb-4 text-xs text-zinc-400">
             Mostrando <strong className="text-white">{filteredChallenges.length}</strong> retos encontrados
+            {completionsLoading && <span className="ml-2">Cargando progreso…</span>}
           </div>
+
+          {completionError && (
+            <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-300">
+              {completionError}
+            </div>
+          )}
 
           <div className="grid gap-6 md:grid-cols-2">
             {paginatedChallenges.map((ch) => {
+              if (selectedChallengeId && selectedChallengeId !== ch.id) return null;
+
               const isDone = completedList.includes(ch.id);
               const isBlocked = lockedChallenges.includes(ch.id);
+              const challengeStatus = challengeStatuses[ch.id] ?? "faltante";
+              const hasErrorStatus = challengeStatus === "erroneo";
               const isFinalized = isDone || isBlocked;
               const isWritable = isChallengeActive(ch);
               const attemptsUsed = attemptsByChallenge[ch.id] ?? 0;
               const canRevealSolution = isDone || isBlocked || attemptsUsed >= 3;
               const evalRes = evalResults[ch.id];
               const shouldShowSolution = Boolean((showSolution[ch.id] && attemptsUsed >= 3) || isDone || isBlocked);
+              const timer = timerRecords[ch.id] ?? { elapsedMs: 0, startedAt: null, finished: false };
+              const elapsedMs =
+                timer.elapsedMs +
+                (!timer.finished && timer.startedAt !== null ? timerNow - timer.startedAt : 0);
+              const speedBonusPreview = calculateSpeedBonusXp(ch.xp, elapsedMs);
+
+              if (!selectedChallengeId) {
+                return (
+                  <button
+                    key={ch.id}
+                    type="button"
+                    disabled={completionsLoading || authLoading}
+                    onClick={() => {
+                      setChallengeActive(true);
+                      setSelectedChallengeId(ch.id);
+                    }}
+                    className={`rounded-2xl border p-6 text-left text-base font-bold text-white shadow-lg transition hover:-translate-y-1 hover:bg-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
+                      completionsLoading || authLoading
+                        ? "cursor-wait border-zinc-800 bg-zinc-900/60 opacity-60"
+                        : isDone
+                        ? "border-emerald-500/50 bg-emerald-950/40 hover:border-emerald-400"
+                        : hasErrorStatus
+                        ? "border-red-500/50 bg-red-950/40 hover:border-red-400"
+                        : "border-zinc-800 bg-zinc-900/60 hover:border-zinc-600"
+                    }`}
+                    aria-label={`Abrir reto: ${ch.title}`}
+                  >
+                    <span className="flex items-center justify-between gap-3">
+                      <span>{ch.title}</span>
+                      <span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] uppercase tracking-wide ${
+                        isDone
+                          ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                          : hasErrorStatus
+                          ? "border-red-500/40 bg-red-500/10 text-red-300"
+                          : "border-zinc-700 bg-zinc-950/50 text-zinc-400"
+                      }`}>
+                        {challengeStatus === "erroneo" ? "Erróneo" : challengeStatus}
+                      </span>
+                    </span>
+                  </button>
+                );
+              }
 
               return (
                 <div
                   key={ch.id}
-                  className={`rounded-2xl border p-6 flex flex-col justify-between backdrop-blur-md transition-all ${
+                  className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-3 backdrop-blur-sm sm:p-8"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-label={ch.title}
+                >
+                  <div
+                    className={`animate-challenge-expand max-h-[92vh] w-full max-w-4xl overflow-y-auto rounded-2xl border p-5 shadow-2xl sm:p-8 flex flex-col justify-between backdrop-blur-md ${
                     isDone
                       ? "border-emerald-500/40 bg-emerald-950/10 shadow-lg shadow-emerald-500/5"
-                      : isBlocked
+                      : isBlocked || hasErrorStatus
                       ? "border-red-500/30 bg-red-950/10 shadow-lg shadow-red-500/5"
-                      : "border-zinc-800 bg-zinc-900/50 hover:border-zinc-700"
+                      : "border-zinc-700 bg-zinc-900"
                   }`}
                 >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setChallengeActive(false);
+                      setSelectedChallengeId(null);
+                    }}
+                    className="mb-5 inline-flex w-fit items-center gap-2 rounded-lg border border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-300 transition hover:border-zinc-500 hover:text-white"
+                  >
+                    <ArrowLeft className="h-4 w-4" />
+                    Volver a los retos
+                  </button>
                   <div>
                     {/* Card Top Badges */}
                     <div className="flex items-center justify-between gap-2 mb-3">
@@ -542,7 +979,7 @@ export default function ChallengesPage() {
                       <div className="flex items-center gap-2">
                         <span className="flex items-center gap-1 text-xs font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
                           <Zap className="h-3 w-3" />
-                          +{ch.xp} XP
+                          +{ch.xp + (isDone ? bonusXpByChallenge[ch.id] ?? 0 : 0)} XP
                         </span>
                         {isDone && (
                           <span className="flex items-center gap-1 text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
@@ -568,10 +1005,36 @@ export default function ChallengesPage() {
                             Bloqueado
                           </span>
                         )}
+                        {!isDone && !isBlocked && hasErrorStatus && (
+                          <span className="flex items-center gap-1 text-xs font-bold text-red-400 bg-red-500/10 px-2 py-0.5 rounded border border-red-500/20">
+                            <AlertCircle className="h-3.5 w-3.5" />
+                            Erróneo
+                          </span>
+                        )}
+                        {!isDone && !isBlocked && !hasErrorStatus && (
+                          <span className="rounded border border-zinc-700 bg-zinc-950/60 px-2 py-0.5 text-[10px] font-bold uppercase text-zinc-400">
+                            Faltante
+                          </span>
+                        )}
                       </div>
                     </div>
 
                     <h3 className="text-base font-bold text-white mb-2">{ch.title}</h3>
+                    <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-zinc-800 bg-zinc-950/70 px-3 py-2 text-xs">
+                      <span className="font-mono font-bold text-white">
+                        Tiempo: {formatElapsedTime(elapsedMs)}
+                      </span>
+                      {isDone ? (
+                        <span className="font-semibold text-emerald-300">
+                          Bono obtenido: +{bonusXpByChallenge[ch.id] ?? 0} XP
+                        </span>
+                      ) : (
+                        <span className="text-amber-300">
+                          Bono por velocidad ahora: +{speedBonusPreview} XP
+                        </span>
+                      )}
+                      <span className="text-zinc-500">El bono disminuye hasta llegar a 0 tras 30 minutos.</span>
+                    </div>
                     <p className="text-xs text-zinc-300 leading-relaxed mb-4">
                       {ch.objective}
                     </p>
@@ -685,6 +1148,7 @@ export default function ChallengesPage() {
                       </div>
                     )}
                   </div>
+                </div>
                 </div>
               );
             })}

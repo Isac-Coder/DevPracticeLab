@@ -102,6 +102,7 @@ scripts/
 | --- | --- | --- |
 | `/` | App Router | Dashboard |
 | `/challenges` | Client Page | Retos y bloqueo por semana |
+| `/ranking` | Client Page | Ranking por puntos, retos completados y tiempo promedio |
 | `/docs` | Client Page | Documentación oficial |
 | `/account` | Client Page | Perfil, nivel, módulos |
 | `/ssh` | Client Page | Práctica SSH |
@@ -111,6 +112,8 @@ scripts/
 | `/login` | Client Page | Inicio de sesión |
 | `/register` | Client Page | Registro |
 | `/api/editor-workspace` | Route Handler | Guardado de archivos por módulo |
+| `/api/challenges/completions` | Route Handler | Estado, puntos y duración de retos |
+| `/api/challenges/leaderboard` | Route Handler | Datos públicos del ranking |
 | `/api/docs` | Route Handler | Búsqueda y render de docs |
 | `/api/modules/available` | Route Handler | Módulos disponibles |
 | `/api/modules/subscribe` | Route Handler | Suscripción |
@@ -155,3 +158,13 @@ Resultado verificado: compilación exitosa con Next.js 16.
 - La lógica de prácticas y retos está diseñada para ser extensible por módulo.
 - Los prompts y respuestas de IA deben mantenerse técnicos, limitados y verificables.
 - Si se modifica el editor o la estructura SQL, revisar la persistencia del estado para no romper la UX.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

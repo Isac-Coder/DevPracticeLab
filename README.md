@@ -151,6 +151,7 @@ scripts/
 | --- | --- | --- |
 | `/` | App Router | Dashboard principal |
 | `/challenges` | Client Page | Retos progresivos |
+| `/ranking` | Client Page | Ranking público por puntos y retos completados |
 | `/docs` | Client Page | Documentación oficial |
 | `/account` | Client Page | Perfil y suscripciones |
 | `/ssh` | Client Page | Práctica SSH |
@@ -160,6 +161,8 @@ scripts/
 | `/login` | Client Page | Inicio de sesión |
 | `/register` | Client Page | Registro |
 | `/api/editor-workspace` | Route Handler | Guardado de archivos por módulo |
+| `/api/challenges/completions` | Route Handler | Estado, puntos y duración de retos |
+| `/api/challenges/leaderboard` | Route Handler | Datos públicos del ranking |
 | `/api/docs` | Route Handler | Documentación y scraping |
 | `/api/modules/available` | Route Handler | Módulos disponibles |
 | `/api/modules/subscribe` | Route Handler | Suscripción de usuario |
@@ -199,10 +202,14 @@ El proyecto usa:
 
 ### Tablas clave
 - `users`
+- `user_challenge_completions`
+- `user_challenge_leaderboard`
 - `available_modules`
 - `user_module_subscriptions`
 - `dont_stop`
 - workspace/editor data si se activa en la base de datos
+
+El ranking se calcula con los puntos de retos resueltos y conserva el tiempo empleado para mostrar el promedio. Los retos completados antes de registrar duración aparecen con el tiempo como “Sin datos”.
 
 ---
 

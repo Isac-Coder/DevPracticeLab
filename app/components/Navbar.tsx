@@ -14,11 +14,12 @@ import {
   LogOut,
   UserPlus,
   BookOpen,
+  Medal,
   Trophy,
   Menu,
   X,
 } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 
 const navItems = [
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/typescript", label: "TypeScript", icon: Code2 },
   { href: "/docs", label: "Docs", icon: BookOpen },
   { href: "/challenges", label: "Retos", icon: Trophy },
+  { href: "/ranking", label: "Ranking", icon: Medal },
 ];
 
 export default function Navbar() {
@@ -36,10 +38,6 @@ export default function Navbar() {
   const router = useRouter();
   const { user, loading, logout } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
-
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [pathname]);
 
   const handleLogout = async () => {
     await logout();

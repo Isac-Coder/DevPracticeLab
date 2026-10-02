@@ -16,9 +16,11 @@ import {
   RotateCcw,
   Pencil,
   Square,
+  LockKeyhole,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
+import { useChallengeMode } from "@/lib/ChallengeModeContext";
 
 interface Message {
   id: string;
@@ -47,49 +49,67 @@ const generateUniqueId = () => {
   return `id-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 };
 
+const createWelcomeMessage = (): Message => ({
+  id: "welcome",
+  role: "assistant",
+  content: "¡Hola! 👋 Soy tu asistente técnico de **DevPracticeLab**. ¿Tienes alguna duda sobre **SSH**, **Docker**, **PostgreSQL**, **TypeScript** o **Next.js**?",
+  timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+});
+
+const isMessageHistory = (value: unknown): value is Message[] =>
+  Array.isArray(value) &&
+  value.length > 0 &&
+  value.every(
+    (message) =>
+      typeof message === "object" &&
+      message !== null &&
+      "id" in message &&
+      typeof message.id === "string" &&
+      "role" in message &&
+      (message.role === "user" || message.role === "assistant") &&
+      "content" in message &&
+      typeof message.content === "string" &&
+      "timestamp" in message &&
+      typeof message.timestamp === "string",
+  );
+
 export default function AiChatbot() {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { challengeActive } = useChallengeMode();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [inputMessage, setInputMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [loadedChatStorageKey, setLoadedChatStorageKey] = useState<string | null>(null);
 
-  const chatStorageKey = user ? `devpracticelab_chat_${user.email}` : "devpracticelab_chat_guest";
+  const userEmail = user?.email;
+  const chatStorageKey = userEmail ? `devpracticelab_chat_${userEmail}` : "devpracticelab_chat_guest";
 
-  const [messages, setMessages] = useState<Message[]>(() => {
-    if (typeof window === "undefined") {
-      // Return default welcome message if not in a browser environment
-      return [
-        {
-          id: "welcome",
-          role: "assistant",
-          content: "¡Hola! 👋 Soy tu asistente técnico de **DevPracticeLab**. ¿Tienes alguna duda sobre **SSH**, **Docker**, **PostgreSQL**, **TypeScript** o **Next.js**?",
-          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-        },
-      ];
-    }
+  const [messages, setMessages] = useState<Message[]>(() => [createWelcomeMessage()]);
+
+  useEffect(() => {
+    if (authLoading) return;
+
     try {
-      const saved = localStorage.getItem(chatStorageKey);
+      const saved = userEmail ? localStorage.getItem(chatStorageKey) : null;
       if (saved) {
-        const parsed = JSON.parse(saved); // Corrected typo
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        const parsed: unknown = JSON.parse(saved);
+        if (isMessageHistory(parsed)) {
+          setMessages(parsed);
+        } else {
+          setMessages([createWelcomeMessage()]);
+        }
+      } else {
+        setMessages([createWelcomeMessage()]);
       }
     } catch (e) {
       console.error("Failed to load messages from localStorage:", e);
-      // Fallback to default welcome message if localStorage data is invalid
+      setMessages([createWelcomeMessage()]);
     }
-    // Default welcome message if no valid saved messages are found
-    return [
-      {
-        id: "welcome",
-        role: "assistant",
-        content: "¡Hola! 👋 Soy tu asistente técnico de **DevPracticeLab**. ¿Tienes alguna duda sobre **SSH**, **Docker**, **PostgreSQL**, **TypeScript** o **Next.js**?",
-        timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      },
-    ];
-  });
+    setLoadedChatStorageKey(userEmail ? chatStorageKey : null);
+  }, [authLoading, chatStorageKey, userEmail]);
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [currentModelName, setCurrentModelName] = useState<string>("gemini-3.5-flash-lite");
@@ -101,12 +121,21 @@ export default function AiChatbot() {
   useEffect(() => () => requestControllerRef.current?.abort(), []);
 
   useEffect(() => {
+    if (challengeActive) {
+      requestControllerRef.current?.abort();
+      setIsOpen(false);
+    }
+  }, [challengeActive]);
+
+  useEffect(() => {
+    if (authLoading || !userEmail || loadedChatStorageKey !== chatStorageKey) return;
+
     try {
       localStorage.setItem(chatStorageKey, JSON.stringify(messages));
-    } catch {
-      // no-op
+    } catch (e) {
+      console.error("Failed to save messages to localStorage:", e);
     }
-  }, [messages, chatStorageKey]);
+  }, [authLoading, messages, chatStorageKey, loadedChatStorageKey, userEmail]);
 
   useEffect(() => {
     const fetchActiveProvider = async () => {
@@ -177,6 +206,7 @@ export default function AiChatbot() {
   if (!user) return null;
 
   const handleSendMessage = async (textToSend?: string) => {
+    if (challengeActive) return;
     const messageContent = (textToSend || inputMessage).trim();
     if (!messageContent || loading) return;
 
@@ -298,18 +328,10 @@ export default function AiChatbot() {
   };
 
   const clearChat = () => {
-    const initialMsg: Message = {
-      id: "welcome",
-      role: "assistant",
+    setMessages([{
+      ...createWelcomeMessage(),
       content: "Chat reiniciado. ¿En qué te puedo ayudar hoy?",
-      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-    };
-    setMessages([initialMsg]);
-    try {
-      localStorage.setItem(chatStorageKey, JSON.stringify([initialMsg]));
-    } catch {
-      // no-op
-    }
+    }]);
   };
 
   // Renderizador simple de Markdown (bloques de código, negritas y enlaces)
@@ -630,23 +652,34 @@ export default function AiChatbot() {
       {/* Botón flotante para abrir el Chatbot */}
       {!isOpen && (
         <button
+          disabled={challengeActive}
           onClick={() => {
             setIsOpen(true);
             setIsMinimized(false);
           }}
-          className="group relative flex items-center gap-2.5 rounded-full border border-emerald-400/40 bg-linear-to-r from-emerald-500 to-teal-500 p-3 sm:px-4 sm:py-3 font-semibold text-zinc-950 shadow-[0_10px_30px_rgba(16,185,129,0.35)] transition-all hover:scale-105 hover:shadow-[0_15px_40px_rgba(16,185,129,0.5)] cursor-pointer"
-          title="Asistente de IA Gemini"
+          className={`group relative flex items-center gap-2.5 rounded-full border p-3 sm:px-4 sm:py-3 font-semibold transition-all ${
+            challengeActive
+              ? "cursor-not-allowed border-zinc-700 bg-zinc-800 text-zinc-400 shadow-none"
+              : "cursor-pointer border-emerald-400/40 bg-linear-to-r from-emerald-500 to-teal-500 text-zinc-950 shadow-[0_10px_30px_rgba(16,185,129,0.35)] hover:scale-105 hover:shadow-[0_15px_40px_rgba(16,185,129,0.5)]"
+          }`}
+          title={challengeActive ? "Chat deshabilitado mientras realizas el reto" : "Asistente de IA Gemini"}
         >
           <span className="relative flex h-5 w-5 items-center justify-center">
-            <Sparkles className="h-5 w-5 text-zinc-950 animate-pulse" />
+            {challengeActive ? (
+              <LockKeyhole className="h-5 w-5" />
+            ) : (
+              <Sparkles className="h-5 w-5 text-zinc-950 animate-pulse" />
+            )}
           </span>
           <span className="hidden sm:inline-block text-xs font-bold tracking-tight">
-            Asistente IA
+            {challengeActive ? "IA deshabilitada" : "Asistente IA"}
           </span>
-          <span className="absolute -top-1 -right-1 flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-200"></span>
-          </span>
+          {!challengeActive && (
+            <span className="absolute -top-1 -right-1 flex h-3 w-3">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-200"></span>
+            </span>
+          )}
         </button>
       )}
     </div>

@@ -12,6 +12,57 @@ export interface Challenge {
   tags: string[];
 }
 
+export type ChallengeStatus = "resuelto" | "erroneo" | "faltante";
+
+export function calculateSpeedBonusXp(baseXp: number, elapsedMs: number): number {
+  const bonusCap = Math.ceil(baseXp * 0.5);
+  const remainingTimeFactor = Math.max(0, 1 - elapsedMs / (30 * 60 * 1000));
+  return Math.round(bonusCap * remainingTimeFactor);
+}
+
+const challengeQuestionStopWords = new Set([
+  "acerca", "algo", "como", "cual", "cuales", "cuando", "con", "de", "del", "desde", "donde",
+  "el", "ella", "en", "es", "esta", "este", "hacer", "hago", "la", "las", "le", "los", "me",
+  "mi", "para", "por", "que", "quiero", "se", "sobre", "su", "tengo", "un", "una", "uno",
+  "y", "the", "how", "what", "which", "about", "can", "do", "for", "from", "help", "i", "in",
+  "is", "me", "my", "of", "please", "solve", "the", "to", "with",
+]);
+
+const challengeQuestionTokens = (text: string) =>
+  new Set(
+    text
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .match(/[a-z0-9]+/g)
+      ?.filter((token) => token.length > 2 && !challengeQuestionStopWords.has(token)) ?? [],
+  );
+
+export function isChallengeRelatedQuestion(question: string): boolean {
+  const questionTokens = challengeQuestionTokens(question);
+  const normalizedQuestion = question
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  const refersToChallenge = /\b(reto|desafio|challenge)\b/.test(normalizedQuestion);
+  const asksForChallengeHelp = /\b(solucion|respuesta|resolv\w*|complet\w*|pista|ayuda)\w*\b/.test(normalizedQuestion);
+  if (refersToChallenge && asksForChallengeHelp) return true;
+  if (questionTokens.size < 2) return false;
+
+  return ALL_CHALLENGES.some((challenge) => {
+    const challengeTokens = challengeQuestionTokens([
+      challenge.title,
+      challenge.objective,
+      ...challenge.hints,
+      ...challenge.expectedKeywords,
+      ...challenge.tags,
+      challenge.solution,
+    ].join(" "));
+    const overlap = [...questionTokens].filter((token) => challengeTokens.has(token)).length;
+    return overlap >= 2 && overlap / questionTokens.size >= 0.5;
+  });
+}
+
 // 50 Retos para SSH
 const sshChallenges: Challenge[] = Array.from({ length: 50 }, (_, i) => {
   const week = i + 1;
