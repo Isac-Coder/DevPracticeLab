@@ -53,7 +53,7 @@ En `/typescript` el editor compila el código con `typescript.transpileModule` y
 Se gestionan perfiles, avance, módulos activos y retos por semana con reglas de desbloqueo.
 
 ### 5) Documentación oficial
-En `/docs` se realiza búsqueda por módulo y render de contenido extraído de páginas reales de referencia.
+En `/docs` se realiza una búsqueda web por módulo al pulsar **Buscar** y se muestra el contenido extraído de páginas oficiales, priorizando la traducción al español y conservando los ejemplos de código. La traducción usa `GEMINI_API_KEY` en el servidor; si no está disponible o falla, se muestra el contenido original en inglés con un aviso.
 
 ### 6) IA técnica
 El chatbot cuenta con fallback local, reintentos de llamadas, persistencia de chat y configuración de Gemini.
@@ -161,6 +161,7 @@ scripts/
 | `/login` | Client Page | Inicio de sesión |
 | `/register` | Client Page | Registro |
 | `/api/editor-workspace` | Route Handler | Guardado de archivos por módulo |
+| `/api/docs/search` | Route Handler | Búsqueda web, extracción y traducción de documentación oficial |
 | `/api/challenges/completions` | Route Handler | Estado, puntos y duración de retos |
 | `/api/challenges/leaderboard` | Route Handler | Datos públicos del ranking |
 | `/api/docs` | Route Handler | Documentación y scraping |

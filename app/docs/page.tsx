@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, type FormEvent } from "react";
 import Link from "next/link";
 import {
   BookOpen,
@@ -19,12 +19,54 @@ import {
   Copy,
   Check,
   Search,
-  Rocket,
 } from "lucide-react";
 import Navbar from "@/app/components/Navbar";
 import type { LiveDocResponse } from "@/app/api/docs/route";
+import type { WebDocumentationResult } from "@/app/api/docs/search/route";
 
 type DocSection = "ssh" | "docker" | "postgres" | "typescript";
+
+const renderDocumentation = (markdown: string) =>
+  markdown
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block, index) => {
+      const codeBlock = block.match(/^```([\w+-]*)\n([\s\S]*?)```$/);
+      if (codeBlock) {
+        return (
+          <pre key={index} className="overflow-x-auto rounded-xl border border-white/10 bg-[#070d13] p-4 text-xs leading-relaxed text-zinc-200">
+            <code>{codeBlock[2].trim()}</code>
+          </pre>
+        );
+      }
+
+      const heading = block.match(/^#{1,4}\s+(.+)$/);
+      if (heading) {
+        return <h4 key={index} className="pt-3 text-lg font-bold text-white">{heading[1]}</h4>;
+      }
+
+      const listItems = block
+        .split("\n")
+        .filter((line) => /^\s*(?:[-*+]|\d+\.)\s+/.test(line));
+      if (listItems.length > 0) {
+        return (
+          <ul key={index} className="list-disc space-y-2 pl-6 text-sm leading-relaxed text-zinc-300">
+            {listItems.map((item, itemIndex) => (
+              <li key={itemIndex}>
+                {item.replace(/^\s*(?:[-*+]|\d+\.)\s+/, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/`([^`]+)`/g, "$1")}
+              </li>
+            ))}
+          </ul>
+        );
+      }
+
+      return (
+        <p key={index} className="whitespace-pre-line text-sm leading-7 text-zinc-300">
+          {block.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/`([^`]+)`/g, "$1")}
+        </p>
+      );
+    });
 
 const MODULE_TABS = [
   { id: "ssh" as DocSection, title: "SSH", icon: Server, color: "text-green-400", border: "border-green-500/30" },
@@ -38,28 +80,17 @@ export default function DocsPage() {
   const [docData, setDocData] = useState<LiveDocResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [submittedQuery, setSubmittedQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<WebDocumentationResult[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [searchRefreshKey, setSearchRefreshKey] = useState(0);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
 
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedQuery(searchQuery);
-    }, 500);
-
-    return () => clearTimeout(handler);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    // Removed Gemini API key loading from localStorage
-  }, []);
-
-  const fetchDocs = useCallback(async (moduleName: DocSection, query = "", apiKey = "") => {
+  const fetchDocs = useCallback(async (moduleName: DocSection) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ module: moduleName });
-      if (query.trim()) params.set("search", query.trim());
-      if (apiKey.trim()) params.set("apiKey", apiKey.trim());
-      const res = await fetch(`/api/docs?${params.toString()}&t=${Date.now()}`);
+      const res = await fetch(`/api/docs?module=${moduleName}&t=${Date.now()}`);
       if (res.ok) {
         const data: LiveDocResponse = await res.json();
         setDocData(data);
@@ -72,8 +103,61 @@ export default function DocsPage() {
   }, []);
 
   useEffect(() => {
-    fetchDocs(activeTab, debouncedQuery);
-  }, [activeTab, debouncedQuery, fetchDocs]);
+    const timeout = window.setTimeout(() => {
+      void fetchDocs(activeTab);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [activeTab, fetchDocs]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      if (!submittedQuery.trim()) {
+        setSearchResults([]);
+        setSearchError("");
+        setSearchLoading(false);
+        return;
+      }
+
+      const search = async () => {
+        setSearchLoading(true);
+        setSearchError("");
+        try {
+          const params = new URLSearchParams({ module: activeTab, query: submittedQuery.trim() });
+          const response = await fetch(`/api/docs/search?${params}`, { signal: controller.signal });
+          const data: { error?: string; results?: WebDocumentationResult[] } = await response.json();
+          if (!response.ok) throw new Error(data.error || "No se pudo buscar la documentación.");
+          setSearchResults(data.results ?? []);
+        } catch (error) {
+          if (!controller.signal.aborted) {
+            setSearchError(error instanceof Error ? error.message : "No se pudo buscar la documentación.");
+            setSearchResults([]);
+          }
+        } finally {
+          if (!controller.signal.aborted) setSearchLoading(false);
+        }
+      };
+
+      void search();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [activeTab, submittedQuery, searchRefreshKey]);
+
+  const submitSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const query = searchQuery.trim();
+    if (!query) return;
+
+    if (query === submittedQuery) {
+      setSearchRefreshKey((current) => current + 1);
+    } else {
+      setSubmittedQuery(query);
+    }
+  };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -84,25 +168,6 @@ export default function DocsPage() {
 
   const currentTabInfo = MODULE_TABS.find((t) => t.id === activeTab)!;
   const Icon = currentTabInfo.icon;
-
-  const isConceptualModule = activeTab === "typescript";
-
-  const filteredCommands = docData?.content.officialCommands.filter(
-    (c) => {
-      const query = searchQuery.toLowerCase().trim();
-      if (!query) return true;
-      const tokens = query.split(/\s+/).filter(Boolean);
-      return tokens.every(token => 
-        c.name.toLowerCase().includes(token) || 
-        c.description.toLowerCase().includes(token) || 
-        c.syntax.toLowerCase().includes(token)
-      );
-    }
-  );
-
-  const hasLocalResults = (filteredCommands?.length ?? 0) > 0;
-  const filteredWebResults = docData?.webResults ?? [];
-  const hasExternalResults = filteredWebResults.length > 0;
 
   const filteredTopics = docData?.content.topics ?? [];
 
@@ -131,7 +196,7 @@ export default function DocsPage() {
                 </div>
 
                 <button
-                  onClick={() => fetchDocs(activeTab)}
+                  onClick={() => submittedQuery.trim() ? setSearchRefreshKey((current) => current + 1) : fetchDocs(activeTab)}
                   disabled={loading}
                   className="flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-semibold text-zinc-200 transition hover:border-white/20 hover:bg-white/10 disabled:opacity-50 cursor-pointer"
                   title="Recargar documentación desde la fuente oficial"
@@ -181,22 +246,102 @@ export default function DocsPage() {
         {/* Content Container */}
         <div className="mx-auto max-w-7xl px-4 sm:px-6 py-10 space-y-10">
           {/* Search Bar */}
-          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <form onSubmit={submitSearch} className="flex flex-col gap-3 md:flex-row md:items-center">
             <div className="relative w-full flex-1">
               <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-400">
                 <Search className="h-4 w-4" />
               </div>
               <input
                 type="text"
-                placeholder={isConceptualModule ? `Buscar conceptos o temas en ${currentTabInfo.title}...` : `Buscar comandos o conceptos en ${currentTabInfo.title}...`}
+                placeholder={`Buscar documentación actualizada de ${currentTabInfo.title} en la web...`}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-full border border-white/10 bg-white/3 py-2.5 pl-10 pr-4 text-xs sm:text-sm text-white placeholder-zinc-500 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)] focus:border-emerald-400/50 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition"
               />
             </div>
-          </div>
+            <button
+              type="submit"
+              disabled={searchLoading || !searchQuery.trim()}
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-5 py-2.5 text-sm font-semibold text-emerald-100 transition hover:border-emerald-300/50 hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Search className="h-4 w-4" />
+              Buscar
+            </button>
+          </form>
 
-          {loading ? (
+          {submittedQuery.trim() ? (
+            searchLoading ? (
+              <div className="flex min-h-75 flex-col items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8 text-center">
+                <div className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-700 border-t-emerald-500" />
+                <p className="mt-4 text-sm text-zinc-300">Buscando y descargando documentación oficial actualizada…</p>
+              </div>
+            ) : searchError ? (
+              <div role="alert" className="rounded-2xl border border-red-500/20 bg-red-500/5 p-6 text-sm text-red-200">
+                {searchError}
+              </div>
+            ) : searchResults.length > 0 ? (
+              <section aria-live="polite" className="space-y-5">
+                <div className="flex flex-wrap items-end justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-emerald-300">Documentación encontrada en la web</p>
+                    <h2 className="mt-1 text-xl font-bold text-white">Resultados para &ldquo;{submittedQuery}&rdquo;</h2>
+                  </div>
+                  <p className="text-xs text-zinc-500">{searchResults.length} documentos oficiales</p>
+                </div>
+
+                {searchResults.map((result) => (
+                  <article key={result.url} className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/70 shadow-xl">
+                    <header className="border-b border-white/10 bg-white/3 px-5 py-4 sm:px-7">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <div className="mb-2 inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+                            <Globe className="h-3.5 w-3.5" />
+                            Fuente oficial actual
+                          </div>
+                          <h3 className="text-lg font-bold text-white sm:text-xl">{result.title}</h3>
+                          <p className="mt-1 break-all text-xs text-zinc-500">{new URL(result.url).hostname}</p>
+                          {result.language === "en" && (
+                            <p className="mt-2 text-xs text-amber-300" role="status">
+                              Traducción al español no disponible; se muestra el contenido original en inglés.
+                            </p>
+                          )}
+                        </div>
+                        {result.publishedAt && (
+                          <p className="text-xs text-zinc-500">
+                            Actualizado: {new Date(result.publishedAt).toLocaleDateString()}
+                          </p>
+                        )}
+                        <p className="mt-1 text-xs text-zinc-500">
+                          Consultado: {new Date(result.retrievedAt).toLocaleString()}
+                        </p>
+                      </div>
+                      {result.summary && (
+                        <p className="mt-4 border-l-2 border-emerald-400/60 pl-3 text-sm leading-relaxed text-zinc-300">
+                          {result.summary}
+                        </p>
+                      )}
+                    </header>
+                    <div className="space-y-4 px-5 py-6 sm:px-7">
+                      {renderDocumentation(result.content)}
+                    </div>
+                    <footer className="border-t border-white/8 px-5 py-3 text-[11px] text-zinc-500 sm:px-7">
+                      Contenido recuperado de la documentación oficial en{" "}
+                      {new URL(result.url).hostname}.{" "}
+                      <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-emerald-300 hover:underline">
+                        Abrir fuente original
+                      </a>
+                    </footer>
+                  </article>
+                ))}
+              </section>
+            ) : (
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-8 text-center">
+                <Search className="mx-auto mb-3 h-7 w-7 text-zinc-500" />
+                <p className="font-semibold text-zinc-200">No se encontró documentación para “{submittedQuery}”.</p>
+                <p className="mt-2 text-sm text-zinc-500">Prueba con otros términos. La búsqueda consulta fuentes oficiales actuales del módulo seleccionado.</p>
+              </div>
+            )
+          ) : loading ? (
               <div className="flex min-h-75 flex-col items-center justify-center rounded-2xl border border-zinc-800 bg-zinc-900/40 p-8 text-center backdrop-blur-md">
               <div className="h-8 w-8 animate-spin rounded-full border-4 border-zinc-700 border-t-emerald-500" />
               <p className="mt-4 text-xs text-zinc-400">Descargando documentación en vivo desde la web oficial...</p>
@@ -281,19 +426,6 @@ export default function DocsPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {hasExternalResults && (
-                    <div className="md:col-span-2 p-4 rounded-xl border border-white/5 bg-white/5">
-                      <h4 className="text-sm font-semibold text-emerald-400 mb-3">Resultados de búsqueda web:</h4>
-                      <div className="space-y-3">
-                        {filteredWebResults?.map((result, idx) => (
-                          <a key={idx} href={result.url} target="_blank" rel="noopener noreferrer" className="block p-3 rounded-lg hover:bg-white/10 transition">
-                            <span className="text-sm font-bold text-white">{result.title}</span>
-                            <p className="text-xs text-zinc-400 mt-0.5">{result.summary}</p>
-                          </a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                   {filteredTopics?.map((topic, idx) => (
                     <div key={idx} className="space-y-3">
                       <h4 className="text-xl font-semibold text-zinc-900 border-b border-zinc-200 pb-2">{topic.title}</h4>
@@ -323,19 +455,6 @@ export default function DocsPage() {
                   <Workflow className="h-5 w-5 text-emerald-400" />
                   <h3>Guías Técnicas & Casos de Uso del Mundo Real</h3>
                 </div>
-
-                {/* Resultados Web */}
-                {filteredWebResults && filteredWebResults.length > 0 && (
-                  <div className="grid gap-6 lg:grid-cols-2 mb-8">
-                    {filteredWebResults.map((result, idx) => (
-                      <div key={idx} className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-5">
-                        <h4 className="text-sm font-bold text-sky-200 mb-2">{result.title}</h4>
-                        <p className="text-xs text-zinc-400 mb-3">{result.summary}</p>
-                        <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-xs text-emerald-400 hover:underline">Ver fuente original</a>
-                      </div>
-                    ))}
-                  </div>
-                )}
 
                 <div className="grid gap-6 lg:grid-cols-2">
                   {filteredTopics?.map((topic, idx) => (
@@ -383,7 +502,7 @@ export default function DocsPage() {
             </>
           ) : (
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-8 text-center text-xs text-zinc-400">
-              No se pudo sincronizar la información. Intenta presionar el botón "Actualizar".
+              No se pudo sincronizar la información. Intenta presionar el botón &quot;Actualizar&quot;.
             </div>
           )}
         </div>
