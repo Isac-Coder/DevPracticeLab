@@ -168,6 +168,7 @@ export default function DocsPage() {
 
   const currentTabInfo = MODULE_TABS.find((t) => t.id === activeTab)!;
   const Icon = currentTabInfo.icon;
+  const showingFallback = searchResults.length > 0 && searchResults.every((result) => result.isFallback);
 
   const filteredTopics = docData?.content.topics ?? [];
 
@@ -283,10 +284,14 @@ export default function DocsPage() {
               <section aria-live="polite" className="space-y-5">
                 <div className="flex flex-wrap items-end justify-between gap-2">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-widest text-emerald-300">Documentación encontrada en la web</p>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-emerald-300">
+                      {showingFallback ? "Referencia local disponible" : "Documentación encontrada en la web"}
+                    </p>
                     <h2 className="mt-1 text-xl font-bold text-white">Resultados para &ldquo;{submittedQuery}&rdquo;</h2>
                   </div>
-                  <p className="text-xs text-zinc-500">{searchResults.length} documentos oficiales</p>
+                  <p className="text-xs text-zinc-500">
+                    {searchResults.length} {searchResults.length === 1 ? "referencia" : "referencias"} {showingFallback ? "local" : "oficiales"}
+                  </p>
                 </div>
 
                 {searchResults.map((result) => (
@@ -296,7 +301,7 @@ export default function DocsPage() {
                         <div>
                           <div className="mb-2 inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
                             <Globe className="h-3.5 w-3.5" />
-                            Fuente oficial actual
+                            {result.isFallback ? "Referencia local de respaldo" : "Fuente oficial actual"}
                           </div>
                           <h3 className="text-lg font-bold text-white sm:text-xl">{result.title}</h3>
                           <p className="mt-1 break-all text-xs text-zinc-500">{new URL(result.url).hostname}</p>
@@ -325,7 +330,9 @@ export default function DocsPage() {
                       {renderDocumentation(result.content)}
                     </div>
                     <footer className="border-t border-white/8 px-5 py-3 text-[11px] text-zinc-500 sm:px-7">
-                      Contenido recuperado de la documentación oficial en{" "}
+                      {result.isFallback
+                        ? "Contenido de referencia local. Consulta la fuente oficial aquí: "
+                        : "Contenido recuperado de la documentación oficial en "}
                       {new URL(result.url).hostname}.{" "}
                       <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-emerald-300 hover:underline">
                         Abrir fuente original

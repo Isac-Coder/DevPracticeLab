@@ -14,6 +14,7 @@ import {
   LogOut,
   UserPlus,
   BookOpen,
+  GraduationCap,
   Medal,
   Trophy,
   Menu,
@@ -29,6 +30,7 @@ const navItems = [
   { href: "/postgres", label: "PostgreSQL", icon: Database },
   { href: "/typescript", label: "TypeScript", icon: Code2 },
   { href: "/docs", label: "Docs", icon: BookOpen },
+  { href: "/courses", label: "Cursos", icon: GraduationCap },
   { href: "/challenges", label: "Retos", icon: Trophy },
   { href: "/ranking", label: "Ranking", icon: Medal },
 ];
@@ -48,7 +50,7 @@ export default function Navbar() {
   return (
     <nav className="w-full border-b border-zinc-800 bg-zinc-950">
       <div className="mx-auto max-w-7xl px-4 sm:px-6">
-        <div className="flex h-16 items-center justify-between">
+        <div className="relative flex h-16 items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -67,7 +69,7 @@ export default function Navbar() {
             </Link>
           </div>
 
-          <div className="hidden lg:flex items-center gap-1">
+          <div className="absolute left-1/2 top-1/2 hidden -translate-x-1/2 -translate-y-1/2 items-center gap-1 lg:flex">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href;
@@ -75,14 +77,20 @@ export default function Navbar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all ${
+                  aria-label={item.label}
+                  className={`group flex h-9 min-w-9 items-center justify-start rounded-lg px-2 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-400 ${
                     isActive
                       ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                       : "text-zinc-400 hover:bg-zinc-800/80 hover:text-white"
                   }`}
                 >
-                  <Icon className="h-3.5 w-3.5" />
-                  {item.label}
+                  <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  <span
+                    aria-hidden="true"
+                    className="ml-0 max-w-0 overflow-hidden whitespace-nowrap text-xs font-semibold opacity-0 transition-[max-width,margin,opacity] delay-100 duration-300 ease-in-out group-hover:ml-2 group-hover:max-w-24 group-hover:opacity-100 group-focus-visible:ml-2 group-focus-visible:max-w-24 group-focus-visible:opacity-100"
+                  >
+                    {item.label}
+                  </span>
                 </Link>
               );
             })}

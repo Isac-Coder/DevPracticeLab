@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { ALL_CHALLENGES } from "@/lib/challengesData";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -218,19 +219,7 @@ export async function initDatabase() {
       );
     `);
 
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS user_challenge_completions (
-        user_id TEXT NOT NULL,
-        challenge_id VARCHAR(100) NOT NULL,
-        status VARCHAR(20) NOT NULL DEFAULT 'resuelto'
-          CHECK (status IN ('resuelto', 'erroneo', 'faltante')),
-        xp_bonus INTEGER NOT NULL DEFAULT 0 CHECK (xp_bonus >= 0),
-        points_earned INTEGER NOT NULL DEFAULT 0 CHECK (points_earned >= 0),
-        elapsed_ms BIGINT NOT NULL DEFAULT 0 CHECK (elapsed_ms >= 0),
-        completed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (user_id, challenge_id)
-      );
-    `);
+    await ensureChallengeTables();
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_challenge_leaderboard (
@@ -242,70 +231,6 @@ export async function initDatabase() {
         timed_challenges INTEGER NOT NULL DEFAULT 0 CHECK (timed_challenges >= 0),
         updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
-    `);
-
-    await client.query(`
-      ALTER TABLE user_challenge_completions
-      ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'resuelto';
-    `);
-    await client.query(`
-      ALTER TABLE user_challenge_completions
-      ADD COLUMN IF NOT EXISTS xp_bonus INTEGER NOT NULL DEFAULT 0;
-    `);
-    await client.query(`
-      ALTER TABLE user_challenge_completions
-      ADD COLUMN IF NOT EXISTS points_earned INTEGER NOT NULL DEFAULT 0;
-    `);
-    await client.query(`
-      ALTER TABLE user_challenge_completions
-      ADD COLUMN IF NOT EXISTS elapsed_ms BIGINT NOT NULL DEFAULT 0;
-    `);
-    await client.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint
-          WHERE conname = 'user_challenge_completions_xp_bonus_check'
-        ) THEN
-          ALTER TABLE user_challenge_completions
-          ADD CONSTRAINT user_challenge_completions_xp_bonus_check
-          CHECK (xp_bonus >= 0);
-        END IF;
-      END $$;
-    `);
-    await client.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint
-          WHERE conname = 'user_challenge_completions_points_earned_check'
-        ) THEN
-          ALTER TABLE user_challenge_completions
-          ADD CONSTRAINT user_challenge_completions_points_earned_check
-          CHECK (points_earned >= 0);
-        END IF;
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint
-          WHERE conname = 'user_challenge_completions_elapsed_ms_check'
-        ) THEN
-          ALTER TABLE user_challenge_completions
-          ADD CONSTRAINT user_challenge_completions_elapsed_ms_check
-          CHECK (elapsed_ms >= 0);
-        END IF;
-      END $$;
-    `);
-    await client.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_constraint
-          WHERE conname = 'user_challenge_completions_status_check'
-        ) THEN
-          ALTER TABLE user_challenge_completions
-          ADD CONSTRAINT user_challenge_completions_status_check
-          CHECK (status IN ('resuelto', 'erroneo', 'faltante'));
-        END IF;
-      END $$;
     `);
 
     await client.query(`
@@ -758,11 +683,11 @@ export async function getChallengeStatuses(
 ): Promise<Record<string, ChallengeStatus>> {
   if (getConnectionString()) {
     await initDatabase();
-    await ensureChallengeStatusTable();
+    await ensureChallengeTables();
     const pool = getPool();
     const result = await pool.query(
       `SELECT challenge_id, status
-       FROM user_challenge_completions
+       FROM user_challenge_progress
        WHERE user_id = $1
        ORDER BY completed_at ASC`,
       [String(userId)]
@@ -784,11 +709,11 @@ export async function getChallengeBonusXp(
 ): Promise<Record<string, number>> {
   if (getConnectionString()) {
     await initDatabase();
-    await ensureChallengeStatusTable();
+    await ensureChallengeTables();
     const pool = getPool();
     const result = await pool.query(
       `SELECT challenge_id, xp_bonus
-       FROM user_challenge_completions
+       FROM user_challenge_progress
        WHERE user_id = $1`,
       [String(userId)]
     );
@@ -810,10 +735,10 @@ export async function ensureChallengeStatusRows(
 ): Promise<void> {
   if (getConnectionString()) {
     await initDatabase();
-    await ensureChallengeStatusTable();
+    await ensureChallengeTables();
     const pool = getPool();
     await pool.query(
-      `INSERT INTO user_challenge_completions (user_id, challenge_id, status)
+      `INSERT INTO user_challenge_progress (user_id, challenge_id, status)
        SELECT $1, ids.challenge_id, 'faltante'
        FROM UNNEST($2::varchar[]) AS ids(challenge_id)
        ON CONFLICT (user_id, challenge_id) DO NOTHING`,
@@ -850,10 +775,10 @@ export async function setChallengeStatus(
 ): Promise<void> {
   if (getConnectionString()) {
     await initDatabase();
-    await ensureChallengeStatusTable();
+    await ensureChallengeTables();
     const pool = getPool();
     await pool.query(
-      `INSERT INTO user_challenge_completions (
+      `INSERT INTO user_challenge_progress (
          user_id, challenge_id, status, xp_bonus, points_earned, elapsed_ms, completed_at
        )
        VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
@@ -890,86 +815,127 @@ export async function setChallengeStatus(
   }
 }
 
-async function ensureChallengeStatusTable() {
+async function ensureChallengeTables() {
   if (global.__challengeStatusSchemaReady) return;
 
   const pool = getPool();
+
   await pool.query(`
-    CREATE TABLE IF NOT EXISTS user_challenge_completions (
-      user_id TEXT NOT NULL,
-      challenge_id VARCHAR(100) NOT NULL,
-      status VARCHAR(20) NOT NULL DEFAULT 'resuelto'
-        CHECK (status IN ('resuelto', 'erroneo', 'faltante')),
-      xp_bonus INTEGER NOT NULL DEFAULT 0 CHECK (xp_bonus >= 0),
-        points_earned INTEGER NOT NULL DEFAULT 0 CHECK (points_earned >= 0),
-        elapsed_ms BIGINT NOT NULL DEFAULT 0 CHECK (elapsed_ms >= 0),
-        completed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (user_id, challenge_id)
+    CREATE TABLE IF NOT EXISTS challenges (
+      id VARCHAR(100) PRIMARY KEY,
+      module VARCHAR(50) NOT NULL,
+      week INTEGER NOT NULL CHECK (week > 0),
+      title TEXT NOT NULL,
+      difficulty VARCHAR(20) NOT NULL CHECK (difficulty IN ('Fácil', 'Intermedio', 'Avanzado')),
+      xp INTEGER NOT NULL DEFAULT 0 CHECK (xp >= 0),
+      objective TEXT NOT NULL,
+      hints JSONB NOT NULL DEFAULT '[]'::jsonb,
+      expected_keywords JSONB NOT NULL DEFAULT '[]'::jsonb,
+      solution TEXT,
+      tags JSONB NOT NULL DEFAULT '[]'::jsonb,
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
+  const challengeRows = ALL_CHALLENGES.map((challenge) => ({
+    id: challenge.id,
+    module: challenge.module,
+    week: challenge.week,
+    title: challenge.title,
+    difficulty: challenge.difficulty,
+    xp: challenge.xp,
+    objective: challenge.objective,
+    hints: JSON.stringify(challenge.hints),
+    expected_keywords: JSON.stringify(challenge.expectedKeywords),
+    solution: challenge.solution,
+    tags: JSON.stringify(challenge.tags),
+  }));
+
+  if (challengeRows.length > 0) {
+    await pool.query(
+      `INSERT INTO challenges (
+         id, module, week, title, difficulty, xp, objective, hints, expected_keywords, solution, tags
+       )
+       SELECT * FROM UNNEST(
+         $1::varchar[],
+         $2::varchar[],
+         $3::integer[],
+         $4::text[],
+         $5::varchar[],
+         $6::integer[],
+         $7::text[],
+         $8::jsonb[],
+         $9::jsonb[],
+         $10::text[],
+         $11::jsonb[]
+       ) AS challenge_rows(
+         id, module, week, title, difficulty, xp, objective, hints, expected_keywords, solution, tags
+       )
+       ON CONFLICT (id) DO UPDATE SET
+         module = EXCLUDED.module,
+         week = EXCLUDED.week,
+         title = EXCLUDED.title,
+         difficulty = EXCLUDED.difficulty,
+         xp = EXCLUDED.xp,
+         objective = EXCLUDED.objective,
+         hints = EXCLUDED.hints,
+         expected_keywords = EXCLUDED.expected_keywords,
+         solution = EXCLUDED.solution,
+         tags = EXCLUDED.tags`,
+      [
+        challengeRows.map((row) => row.id),
+        challengeRows.map((row) => row.module),
+        challengeRows.map((row) => row.week),
+        challengeRows.map((row) => row.title),
+        challengeRows.map((row) => row.difficulty),
+        challengeRows.map((row) => row.xp),
+        challengeRows.map((row) => row.objective),
+        challengeRows.map((row) => row.hints),
+        challengeRows.map((row) => row.expected_keywords),
+        challengeRows.map((row) => row.solution),
+        challengeRows.map((row) => row.tags),
+      ]
+    );
+  }
+
   await pool.query(`
-    ALTER TABLE user_challenge_completions
-    ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'resuelto';
+    CREATE TABLE IF NOT EXISTS user_challenge_progress (
+      user_id TEXT NOT NULL,
+      challenge_id VARCHAR(100) NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'faltante'
+        CHECK (status IN ('resuelto', 'erroneo', 'faltante')),
+      xp_bonus INTEGER NOT NULL DEFAULT 0 CHECK (xp_bonus >= 0),
+      points_earned INTEGER NOT NULL DEFAULT 0 CHECK (points_earned >= 0),
+      elapsed_ms BIGINT NOT NULL DEFAULT 0 CHECK (elapsed_ms >= 0),
+      completed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, challenge_id),
+      CONSTRAINT user_challenge_progress_challenge_fk
+        FOREIGN KEY (challenge_id) REFERENCES challenges(id) ON DELETE CASCADE
+    );
   `);
-  await pool.query(`
-    ALTER TABLE user_challenge_completions
-    ADD COLUMN IF NOT EXISTS xp_bonus INTEGER NOT NULL DEFAULT 0;
-  `);
-  await pool.query(`
-    ALTER TABLE user_challenge_completions
-    ADD COLUMN IF NOT EXISTS points_earned INTEGER NOT NULL DEFAULT 0;
-  `);
-  await pool.query(`
-    ALTER TABLE user_challenge_completions
-    ADD COLUMN IF NOT EXISTS elapsed_ms BIGINT NOT NULL DEFAULT 0;
-  `);
+
   await pool.query(`
     DO $$
     BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'user_challenge_completions_xp_bonus_check'
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_name = 'user_challenge_completions'
       ) THEN
-        ALTER TABLE user_challenge_completions
-        ADD CONSTRAINT user_challenge_completions_xp_bonus_check
-        CHECK (xp_bonus >= 0);
+        INSERT INTO user_challenge_progress (user_id, challenge_id, status, xp_bonus, points_earned, elapsed_ms, completed_at)
+        SELECT user_id, challenge_id, status, xp_bonus, points_earned, elapsed_ms, completed_at
+        FROM user_challenge_completions
+        ON CONFLICT (user_id, challenge_id) DO UPDATE SET
+          status = EXCLUDED.status,
+          xp_bonus = EXCLUDED.xp_bonus,
+          points_earned = EXCLUDED.points_earned,
+          elapsed_ms = EXCLUDED.elapsed_ms,
+          completed_at = EXCLUDED.completed_at;
+
+        DROP TABLE user_challenge_completions;
       END IF;
     END $$;
   `);
-  await pool.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'user_challenge_completions_status_check'
-      ) THEN
-        ALTER TABLE user_challenge_completions
-        ADD CONSTRAINT user_challenge_completions_status_check
-        CHECK (status IN ('resuelto', 'erroneo', 'faltante'));
-      END IF;
-    END $$;
-  `);
-  await pool.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'user_challenge_completions_points_earned_check'
-      ) THEN
-        ALTER TABLE user_challenge_completions
-        ADD CONSTRAINT user_challenge_completions_points_earned_check
-        CHECK (points_earned >= 0);
-      END IF;
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint
-        WHERE conname = 'user_challenge_completions_elapsed_ms_check'
-      ) THEN
-        ALTER TABLE user_challenge_completions
-        ADD CONSTRAINT user_challenge_completions_elapsed_ms_check
-        CHECK (elapsed_ms >= 0);
-      END IF;
-    END $$;
-  `);
+
   global.__challengeStatusSchemaReady = true;
 }
 
@@ -1019,7 +985,7 @@ export async function getChallengeLeaderboard(
   if (!global.__schemaInitialized) {
     throw new DatabaseUnavailableError();
   }
-  await ensureChallengeStatusTable();
+  await ensureChallengeTables();
   await ensureChallengeLeaderboardTable();
 
   const pool = getPool();
@@ -1034,7 +1000,7 @@ export async function getChallengeLeaderboard(
          completion.xp_bonus,
          completion.points_earned,
          completion.elapsed_ms
-       FROM user_challenge_completions AS completion
+       FROM user_challenge_progress AS completion
        LEFT JOIN users ON users.id::text = completion.user_id
        WHERE completion.status = 'resuelto'`
     );
