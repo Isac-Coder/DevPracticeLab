@@ -87,17 +87,22 @@ export function ModuleProgressBar({ module, showDetails = true }: ModuleProgress
       {showDetails && (
         <div className="mt-3 flex flex-wrap items-center justify-between text-xs text-zinc-400 gap-2 border-t border-zinc-800/60 pt-2.5">
           <div className="flex items-center gap-1.5">
-            <Flame className="h-3.5 w-3.5 text-amber-400" />
+            <Award className="h-3.5 w-3.5 text-amber-400" />
             <span>
-              <strong className="text-white font-medium">{stats.commandsExecuted}</strong> comandos ejecutados
+              <strong className="text-white font-medium">{stats.challengesCompleted}/{stats.challengesTotal}</strong> retos
             </span>
           </div>
 
           <div className="flex items-center gap-1.5">
             <CheckCircle className="h-3.5 w-3.5 text-emerald-400" />
             <span>
-              <strong className="text-white font-medium">{stats.uniqueCount}</strong> comandos distintos
+              <strong className="text-white font-medium">{stats.courseLessonsCompleted}/{stats.courseLessonsTotal}</strong> cursos
             </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Flame className="h-3.5 w-3.5 text-zinc-400" />
+            <span><strong className="text-white font-medium">{stats.commandsExecuted}</strong> ejecuciones</span>
           </div>
         </div>
       )}
@@ -129,7 +134,7 @@ export function OverallProgressDashboard() {
               </span>
             </h3>
             <p className="text-xs text-zinc-400">
-              Monitoreo de comandos ejecutados y objetivos alcanzados en tus terminales
+              El avance prioriza retos resueltos y lecciones aprobadas; las ejecuciones complementan tu práctica.
             </p>
           </div>
         </div>
@@ -164,8 +169,8 @@ export function OverallProgressDashboard() {
             />
           </div>
           <div className="mt-2.5 flex justify-between text-[11px] text-zinc-400">
-            <span>{sshStats.commandsExecuted} ejecuciones</span>
-            <span>{sshStats.completedTargets.length}/{sshStats.totalGoal} objetivos</span>
+            <span>{sshStats.challengesCompleted}/{sshStats.challengesTotal} retos</span>
+            <span>{sshStats.courseLessonsCompleted}/{sshStats.courseLessonsTotal} cursos</span>
           </div>
         </div>
 
@@ -185,8 +190,8 @@ export function OverallProgressDashboard() {
             />
           </div>
           <div className="mt-2.5 flex justify-between text-[11px] text-zinc-400">
-            <span>{dockerStats.commandsExecuted} ejecuciones</span>
-            <span>{dockerStats.completedTargets.length}/{dockerStats.totalGoal} objetivos</span>
+            <span>{dockerStats.challengesCompleted}/{dockerStats.challengesTotal} retos</span>
+            <span>{dockerStats.courseLessonsCompleted}/{dockerStats.courseLessonsTotal} cursos</span>
           </div>
         </div>
 
@@ -206,8 +211,8 @@ export function OverallProgressDashboard() {
             />
           </div>
           <div className="mt-2.5 flex justify-between text-[11px] text-zinc-400">
-            <span>{postgresStats.commandsExecuted} ejecuciones</span>
-            <span>{postgresStats.completedTargets.length}/{postgresStats.totalGoal} objetivos</span>
+            <span>{postgresStats.challengesCompleted}/{postgresStats.challengesTotal} retos</span>
+            <span>{postgresStats.courseLessonsCompleted}/{postgresStats.courseLessonsTotal} cursos</span>
           </div>
         </div>
 
@@ -227,8 +232,8 @@ export function OverallProgressDashboard() {
             />
           </div>
           <div className="mt-2.5 flex justify-between text-[11px] text-zinc-400">
-            <span>{tsStats.commandsExecuted} ejecuciones</span>
-            <span>{tsStats.completedTargets.length}/{tsStats.totalGoal} objetivos</span>
+            <span>{tsStats.challengesCompleted}/{tsStats.challengesTotal} retos</span>
+            <span>{tsStats.courseLessonsCompleted}/{tsStats.courseLessonsTotal} cursos</span>
           </div>
         </div>
       </div>

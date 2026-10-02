@@ -57,6 +57,14 @@ declare global {
     updated_at: Date;
   }> | undefined;
   // eslint-disable-next-line no-var
+  var __mockUserCourseProgress: Array<{
+    user_id: string;
+    module_key: string;
+    level_name: string;
+    lesson_title: string;
+    completed_at: Date;
+  }> | undefined;
+  // eslint-disable-next-line no-var
   var __mockChallengeCompletions: Array<{
     user_id: string;
     challenge_id: string;
@@ -70,6 +78,7 @@ declare global {
   var __schemaInitialized: boolean | undefined;
   var __challengeStatusSchemaReady: boolean | undefined;
   var __challengeLeaderboardSchemaReady: boolean | undefined;
+  var __courseProgressSchemaReady: boolean | undefined;
 }
 
 function getConnectionString(): string {
@@ -108,6 +117,7 @@ if (!global.__mockAvailableModules) {
 if (!global.__mockUserSubscriptions) global.__mockUserSubscriptions = [];
 if (!global.__mockUserApiKeys) global.__mockUserApiKeys = [];
 if (!global.__mockEditorWorkspaces) global.__mockEditorWorkspaces = [];
+if (!global.__mockUserCourseProgress) global.__mockUserCourseProgress = [];
 if (!global.__mockChallengeCompletions) global.__mockChallengeCompletions = [];
 
 export type ChallengeStatus = "resuelto" | "erroneo" | "faltante";
@@ -216,6 +226,17 @@ export async function initDatabase() {
         active_file_id TEXT,
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (user_id, module_key)
+      );
+    `);
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS user_course_progress (
+        user_id TEXT NOT NULL,
+        module_key VARCHAR(20) NOT NULL CHECK (module_key IN ('ssh', 'docker', 'postgres', 'typescript')),
+        level_name VARCHAR(20) NOT NULL CHECK (level_name IN ('Principiante', 'Básico', 'Normal', 'Avanzado', 'Experto')),
+        lesson_title VARCHAR(200) NOT NULL,
+        completed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, module_key, level_name, lesson_title)
       );
     `);
 
@@ -1144,6 +1165,89 @@ async function ensureEditorWorkspaceTable() {
       PRIMARY KEY (user_id, module_key)
     );
   `);
+}
+
+async function ensureUserCourseProgressTable() {
+  if (global.__courseProgressSchemaReady) return;
+
+  const pool = getPool();
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_course_progress (
+      user_id TEXT NOT NULL,
+      module_key VARCHAR(20) NOT NULL CHECK (module_key IN ('ssh', 'docker', 'postgres', 'typescript')),
+      level_name VARCHAR(20) NOT NULL CHECK (level_name IN ('Principiante', 'Básico', 'Normal', 'Avanzado', 'Experto')),
+      lesson_title VARCHAR(200) NOT NULL,
+      completed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, module_key, level_name, lesson_title)
+    );
+  `);
+  global.__courseProgressSchemaReady = true;
+}
+
+export async function getUserCourseProgress(
+  userId: number | string,
+): Promise<Record<string, string[]>> {
+  let entries: Array<{ module_key: string; level_name: string; lesson_title: string }>;
+
+  if (getConnectionString()) {
+    await initDatabase();
+    await ensureUserCourseProgressTable();
+    const result = await getPool().query(
+      `SELECT module_key, level_name, lesson_title
+       FROM user_course_progress
+       WHERE user_id = $1
+       ORDER BY completed_at ASC`,
+      [String(userId)],
+    );
+    entries = result.rows;
+  } else {
+    entries = global.__mockUserCourseProgress!
+      .filter((entry) => entry.user_id === String(userId));
+  }
+
+  return entries.reduce<Record<string, string[]>>((progress, entry) => {
+    const key = `${entry.module_key}:${entry.level_name}`;
+    const completed = progress[key] ?? [];
+    if (!completed.includes(entry.lesson_title)) {
+      progress[key] = [...completed, entry.lesson_title];
+    }
+    return progress;
+  }, {});
+}
+
+export async function completeUserCourseLesson(
+  userId: number | string,
+  moduleKey: string,
+  levelName: string,
+  lessonTitle: string,
+): Promise<void> {
+  if (getConnectionString()) {
+    await initDatabase();
+    await ensureUserCourseProgressTable();
+    await getPool().query(
+      `INSERT INTO user_course_progress (user_id, module_key, level_name, lesson_title)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (user_id, module_key, level_name, lesson_title) DO NOTHING`,
+      [String(userId), moduleKey, levelName, lessonTitle],
+    );
+    return;
+  }
+
+  const alreadyCompleted = global.__mockUserCourseProgress!.some(
+    (entry) => entry.user_id === String(userId) &&
+      entry.module_key === moduleKey &&
+      entry.level_name === levelName &&
+      entry.lesson_title === lessonTitle,
+  );
+  if (!alreadyCompleted) {
+    global.__mockUserCourseProgress!.push({
+      user_id: String(userId),
+      module_key: moduleKey,
+      level_name: levelName,
+      lesson_title: lessonTitle,
+      completed_at: new Date(),
+    });
+  }
 }
 
 export async function getEditorWorkspace(

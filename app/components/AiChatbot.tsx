@@ -16,7 +16,6 @@ import {
   RotateCcw,
   Pencil,
   Square,
-  LockKeyhole,
 } from "lucide-react";
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
@@ -76,7 +75,7 @@ const isMessageHistory = (value: unknown): value is Message[] =>
 export default function AiChatbot() {
   const pathname = usePathname();
   const { user, loading: authLoading } = useAuth();
-  const { challengeActive } = useChallengeMode();
+  const { challengeActive, practiceContext } = useChallengeMode();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -121,13 +120,6 @@ export default function AiChatbot() {
   useEffect(() => () => requestControllerRef.current?.abort(), []);
 
   useEffect(() => {
-    if (challengeActive) {
-      requestControllerRef.current?.abort();
-      setIsOpen(false);
-    }
-  }, [challengeActive]);
-
-  useEffect(() => {
     if (authLoading || !userEmail || loadedChatStorageKey !== chatStorageKey) return;
 
     try {
@@ -162,8 +154,23 @@ export default function AiChatbot() {
     }
   }, [isOpen]);
 
+  const activePracticeContext = pathname.startsWith("/courses") && practiceContext?.type === "course"
+    ? practiceContext
+    : pathname.startsWith("/challenges") && challengeActive && practiceContext?.type === "challenge"
+    ? practiceContext
+    : null;
+  const moduleNames: Record<string, string> = {
+    ssh: "SSH",
+    docker: "Docker",
+    postgres: "PostgreSQL",
+    typescript: "TypeScript",
+  };
+
   // Determinar módulo actual a partir del pathname
   const currentModule = (() => {
+    if (activePracticeContext) {
+      return `${moduleNames[activePracticeContext.module] ?? activePracticeContext.module}${activePracticeContext.level ? ` · ${activePracticeContext.level}` : ""}`;
+    }
     if (pathname.includes("/ssh")) return "SSH";
     if (pathname.includes("/docker")) return "Docker";
     if (pathname.includes("/postgres")) return "PostgreSQL";
@@ -206,7 +213,6 @@ export default function AiChatbot() {
   if (!user) return null;
 
   const handleSendMessage = async (textToSend?: string) => {
-    if (challengeActive) return;
     const messageContent = (textToSend || inputMessage).trim();
     if (!messageContent || loading) return;
 
@@ -242,6 +248,7 @@ export default function AiChatbot() {
                 content: m.content,
               })),
               moduleContext: currentModule,
+                practiceContext: activePracticeContext,
             }),
           });
 
@@ -438,7 +445,7 @@ export default function AiChatbot() {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end">
+    <div className={`fixed bottom-5 right-5 flex flex-col items-end ${challengeActive ? "z-70" : "z-50"}`}>
       {/* Ventana del Chatbot */}
       {isOpen && (
         <div
@@ -652,34 +659,23 @@ export default function AiChatbot() {
       {/* Botón flotante para abrir el Chatbot */}
       {!isOpen && (
         <button
-          disabled={challengeActive}
           onClick={() => {
             setIsOpen(true);
             setIsMinimized(false);
           }}
-          className={`group relative flex items-center gap-2.5 rounded-full border p-3 sm:px-4 sm:py-3 font-semibold transition-all ${
-            challengeActive
-              ? "cursor-not-allowed border-zinc-700 bg-zinc-800 text-zinc-400 shadow-none"
-              : "cursor-pointer border-emerald-400/40 bg-linear-to-r from-emerald-500 to-teal-500 text-zinc-950 shadow-[0_10px_30px_rgba(16,185,129,0.35)] hover:scale-105 hover:shadow-[0_15px_40px_rgba(16,185,129,0.5)]"
-          }`}
-          title={challengeActive ? "Chat deshabilitado mientras realizas el reto" : "Asistente de IA Gemini"}
+          className="group relative flex cursor-pointer items-center gap-2.5 rounded-full border border-emerald-400/40 bg-linear-to-r from-emerald-500 to-teal-500 p-3 font-semibold text-zinc-950 shadow-[0_10px_30px_rgba(16,185,129,0.35)] transition-all hover:scale-105 hover:shadow-[0_15px_40px_rgba(16,185,129,0.5)] sm:px-4 sm:py-3"
+          title={activePracticeContext ? "Pedir una pista al tutor" : "Asistente de IA Gemini"}
         >
           <span className="relative flex h-5 w-5 items-center justify-center">
-            {challengeActive ? (
-              <LockKeyhole className="h-5 w-5" />
-            ) : (
-              <Sparkles className="h-5 w-5 text-zinc-950 animate-pulse" />
-            )}
+            <Sparkles className="h-5 w-5 animate-pulse text-zinc-950" />
           </span>
           <span className="hidden sm:inline-block text-xs font-bold tracking-tight">
-            {challengeActive ? "IA deshabilitada" : "Asistente IA"}
+            {activePracticeContext ? "Tutor IA" : "Asistente IA"}
           </span>
-          {!challengeActive && (
-            <span className="absolute -top-1 -right-1 flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-200"></span>
-            </span>
-          )}
+          <span className="absolute -top-1 -right-1 flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-200"></span>
+          </span>
         </button>
       )}
     </div>

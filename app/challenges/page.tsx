@@ -14,15 +14,9 @@ import {
   Container,
   Database,
   Code2,
-  Rocket,
   Calendar,
-  Flame,
-  Award,
   Zap,
   Search,
-  Filter,
-  Check,
-  RotateCcw,
   ArrowLeft,
 } from "lucide-react";
 import Navbar from "@/app/components/Navbar";
@@ -52,7 +46,7 @@ const formatElapsedTime = (elapsedMs: number) => {
 
 export default function ChallengesPage() {
   const { user, loading: authLoading } = useAuth();
-  const { setChallengeActive } = useChallengeMode();
+  const { setChallengeActive, setPracticeContext } = useChallengeMode();
   const [completedList, setCompletedList] = useState<string[]>([]);
   const [challengeStatuses, setChallengeStatuses] = useState<Record<string, ChallengeStatus>>({});
   const [bonusXpByChallenge, setBonusXpByChallenge] = useState<Record<string, number>>({});
@@ -86,9 +80,16 @@ export default function ChallengesPage() {
 
   useEffect(() => {
     setChallengeActive(selectedChallengeId !== null);
-  }, [selectedChallengeId, setChallengeActive]);
+    const activeChallenge = ALL_CHALLENGES.find((challenge) => challenge.id === selectedChallengeId);
+    setPracticeContext(activeChallenge
+      ? { type: "challenge", module: activeChallenge.module, title: activeChallenge.title }
+      : null);
+  }, [selectedChallengeId, setChallengeActive, setPracticeContext]);
 
-  useEffect(() => () => setChallengeActive(false), [setChallengeActive]);
+  useEffect(() => () => {
+    setChallengeActive(false);
+    setPracticeContext(null);
+  }, [setChallengeActive, setPracticeContext]);
 
   useEffect(() => {
     if (!selectedChallengeId) return;
@@ -717,37 +718,6 @@ export default function ChallengesPage() {
               </div>
             </div>
 
-            {/* Current Active Week Banner */}
-            <div className="mt-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-amber-500/30 bg-amber-500/5 p-4 sm:p-5">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                  <Calendar className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                    Retos de la Semana #{currentCalendarWeek} en curso
-                    <span className="rounded-full bg-amber-500/20 text-amber-300 text-[10px] font-bold px-2 py-0.5 border border-amber-500/30">
-                      Activo ahora
-                    </span>
-                  </h4>
-                  <p className="text-xs text-zinc-400">
-                    Se rota un reto por tecnología cada semana del año (1 a 50 semanas).
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setSelectedWeek(currentCalendarWeek);
-                    setSelectedFilter("weekly");
-                  }}
-                  className="rounded-xl bg-amber-500 hover:bg-amber-400 text-zinc-950 px-3.5 py-1.5 text-xs font-bold transition shadow-sm cursor-pointer"
-                >
-                  Ver Semana #{currentCalendarWeek}
-                </button>
-              </div>
-            </div>
           </div>
         </section>
 

@@ -26,6 +26,12 @@ import type { WebDocumentationResult } from "@/app/api/docs/search/route";
 
 type DocSection = "ssh" | "docker" | "postgres" | "typescript";
 
+const cleanDocumentationText = (text: string) =>
+  text
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, "")
+    .replace(/\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1");
+
 const renderDocumentation = (markdown: string) =>
   markdown
     .split(/\n{2,}/)
@@ -43,7 +49,7 @@ const renderDocumentation = (markdown: string) =>
 
       const heading = block.match(/^#{1,4}\s+(.+)$/);
       if (heading) {
-        return <h4 key={index} className="pt-3 text-lg font-bold text-white">{heading[1]}</h4>;
+        return <h4 key={index} className="pt-3 text-lg font-bold text-white">{cleanDocumentationText(heading[1])}</h4>;
       }
 
       const listItems = block
@@ -54,7 +60,7 @@ const renderDocumentation = (markdown: string) =>
           <ul key={index} className="list-disc space-y-2 pl-6 text-sm leading-relaxed text-zinc-300">
             {listItems.map((item, itemIndex) => (
               <li key={itemIndex}>
-                {item.replace(/^\s*(?:[-*+]|\d+\.)\s+/, "").replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/`([^`]+)`/g, "$1")}
+                {cleanDocumentationText(item.replace(/^\s*(?:[-*+]|\d+\.)\s+/, ""))}
               </li>
             ))}
           </ul>
@@ -63,7 +69,7 @@ const renderDocumentation = (markdown: string) =>
 
       return (
         <p key={index} className="whitespace-pre-line text-sm leading-7 text-zinc-300">
-          {block.replace(/\[([^\]]+)\]\([^)]+\)/g, "$1").replace(/`([^`]+)`/g, "$1")}
+          {cleanDocumentationText(block)}
         </p>
       );
     });
@@ -168,7 +174,6 @@ export default function DocsPage() {
 
   const currentTabInfo = MODULE_TABS.find((t) => t.id === activeTab)!;
   const Icon = currentTabInfo.icon;
-  const showingFallback = searchResults.length > 0 && searchResults.every((result) => result.isFallback);
 
   const filteredTopics = docData?.content.topics ?? [];
 
@@ -284,13 +289,11 @@ export default function DocsPage() {
               <section aria-live="polite" className="space-y-5">
                 <div className="flex flex-wrap items-end justify-between gap-2">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-widest text-emerald-300">
-                      {showingFallback ? "Referencia local disponible" : "Documentación encontrada en la web"}
-                    </p>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-emerald-300">Documentación oficial encontrada</p>
                     <h2 className="mt-1 text-xl font-bold text-white">Resultados para &ldquo;{submittedQuery}&rdquo;</h2>
                   </div>
                   <p className="text-xs text-zinc-500">
-                    {searchResults.length} {searchResults.length === 1 ? "referencia" : "referencias"} {showingFallback ? "local" : "oficiales"}
+                    {searchResults.length} {searchResults.length === 1 ? "documento" : "documentos"} oficiales
                   </p>
                 </div>
 
@@ -301,7 +304,7 @@ export default function DocsPage() {
                         <div>
                           <div className="mb-2 inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
                             <Globe className="h-3.5 w-3.5" />
-                            {result.isFallback ? "Referencia local de respaldo" : "Fuente oficial actual"}
+                            Fuente oficial actual
                           </div>
                           <h3 className="text-lg font-bold text-white sm:text-xl">{result.title}</h3>
                           <p className="mt-1 break-all text-xs text-zinc-500">{new URL(result.url).hostname}</p>
@@ -330,9 +333,7 @@ export default function DocsPage() {
                       {renderDocumentation(result.content)}
                     </div>
                     <footer className="border-t border-white/8 px-5 py-3 text-[11px] text-zinc-500 sm:px-7">
-                      {result.isFallback
-                        ? "Contenido de referencia local. Consulta la fuente oficial aquí: "
-                        : "Contenido recuperado de la documentación oficial en "}
+                      Contenido recuperado de la documentación oficial en{" "}
                       {new URL(result.url).hostname}.{" "}
                       <a href={result.url} target="_blank" rel="noopener noreferrer" className="text-emerald-300 hover:underline">
                         Abrir fuente original
@@ -344,8 +345,8 @@ export default function DocsPage() {
             ) : (
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-8 text-center">
                 <Search className="mx-auto mb-3 h-7 w-7 text-zinc-500" />
-                <p className="font-semibold text-zinc-200">No se encontró documentación para “{submittedQuery}”.</p>
-                <p className="mt-2 text-sm text-zinc-500">Prueba con otros términos. La búsqueda consulta fuentes oficiales actuales del módulo seleccionado.</p>
+                <p className="font-semibold text-zinc-200">No se encontró documentación oficial de {currentTabInfo.title} para “{submittedQuery}”.</p>
+                <p className="mt-2 text-sm text-zinc-500">Confirma que el módulo seleccionado coincida con tu búsqueda o prueba otros términos.</p>
               </div>
             )
           ) : loading ? (

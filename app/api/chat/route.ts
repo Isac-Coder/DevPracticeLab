@@ -1,11 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserAiConfigs } from "@/lib/db";
 import { getSession } from "@/lib/auth";
-import { isChallengeRelatedQuestion } from "@/lib/challengesData";
+
+interface PracticeContext {
+  type: "challenge" | "course";
+  module: "ssh" | "docker" | "postgres" | "typescript";
+  level?: string;
+  title?: string;
+}
+
+const normalizeText = (text: string) =>
+  text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+const isPracticeContext = (value: unknown): value is PracticeContext =>
+  typeof value === "object" && value !== null &&
+  "type" in value && (value.type === "challenge" || value.type === "course") &&
+  "module" in value &&
+  (value.module === "ssh" || value.module === "docker" || value.module === "postgres" || value.module === "typescript");
+
+const isDirectPracticeSolutionRequest = (message: string) => {
+  const normalized = normalizeText(message);
+  const requestsCompletion = /\b(dame|dime|proporciona|escribe|genera|resolv\w*|solucion\w*|completa|haz|contesta|give me|provide|write|generate|solve|complete|answer)\b/.test(normalized);
+  const asksForAnswer = /\b(respuesta|solucion|codigo|comando|consulta|query|script|reto|desafio|ejercicio|answer|solution|code|command|challenge|exercise)\b/.test(normalized);
+  return requestsCompletion && asksForAnswer;
+};
+
+const practiceHints: Record<PracticeContext["module"], string> = {
+  ssh: "Pista: separa usuario, host y método de autenticación; verifica cada parte antes de ejecutar un comando.",
+  docker: "Pista: distingue imagen, contenedor y configuración; comprueba el estado antes de añadir más opciones.",
+  postgres: "Pista: identifica tabla, columnas y condición; prueba primero la lectura antes de modificar datos.",
+  typescript: "Pista: define las entradas y salidas, y piensa qué tipo y qué casos límite debe cubrir la solución.",
+};
 
 export async function POST(req: NextRequest) {
   try {
-    const { messages, moduleContext, providerOverride } = await req.json();
+    const { messages, moduleContext, providerOverride, practiceContext: contextValue } = await req.json();
 
     if (!Array.isArray(messages) || messages.length === 0) {
       return NextResponse.json(
@@ -17,10 +46,12 @@ export async function POST(req: NextRequest) {
     const lastUserMessage = [...messages]
       .reverse()
       .find((message) => message?.role === "user" && typeof message.content === "string");
-    if (lastUserMessage && isChallengeRelatedQuestion(lastUserMessage.content)) {
+
+    const practiceContext = isPracticeContext(contextValue) ? contextValue : null;
+    if (practiceContext && lastUserMessage && isDirectPracticeSolutionRequest(lastUserMessage.content)) {
       return NextResponse.json({
-        reply: "Haciendo trampa para completar un reto... ¡Qué mal! Intenta resolverlo por tu cuenta; puedo ayudarte con otros temas.",
-        provider: "challenge-guard",
+        reply: `Puedo orientarte con ${practiceContext.title ? `“${practiceContext.title.slice(0, 120)}”` : "esta práctica"}, pero no resolverla por ti. ${practiceHints[practiceContext.module]} Cuéntame qué has intentado y te doy la siguiente pista.`,
+        provider: "practice-tutor",
         needsKey: false,
       });
     }
@@ -57,6 +88,7 @@ export async function POST(req: NextRequest) {
 - Usa markdown para código.
 - Responde en español.
 - Si no sabes, admítelo.
+  ${practiceContext ? `MODO TUTOR DE ${practiceContext.type === "challenge" ? "RETO" : "CURSO"}: Estás ayudando con ${practiceContext.module}${practiceContext.level ? `, nivel ${practiceContext.level}` : ""}${practiceContext.title ? `, actividad ${practiceContext.title}` : ""}. Da pistas graduales, explica conceptos y haz preguntas que guíen el razonamiento. No entregues la respuesta final, una solución completa, ni código/SQL/comandos listos para pegar. Si el usuario pide que completes la actividad, recházalo brevemente y ofrece una pista conceptual. Para dudas generales del tema, sí puedes explicar el concepto sin resolver la actividad concreta.` : ""}
 ${moduleContext ? `Contexto: ${moduleContext}.` : ""}`;
 
     // ==========================================
@@ -144,9 +176,9 @@ ${moduleContext ? `Contexto: ${moduleContext}.` : ""}`;
       model: selectedModel,
       needsKey: false,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("Error en endpoint /api/chat:", error);
-    if (error.name === "AbortError") {
+    if (error instanceof Error && error.name === "AbortError") {
       return NextResponse.json({
         reply: "La solicitud tardó demasiado tiempo en responder. Por favor intenta de nuevo con una consulta más corta.",
       });

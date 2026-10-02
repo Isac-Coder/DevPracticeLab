@@ -20,47 +20,7 @@ export interface WebDocumentationResult extends SearchCandidate {
   publishedAt: string | null;
   retrievedAt: string;
   language: "es" | "en";
-  isFallback?: boolean;
 }
-
-const OFFLINE_REFERENCES: Record<DocModule, { title: string; url: string; summary: string; content: string }> = {
-  ssh: {
-    title: "Referencia local: autenticación SSH",
-    url: "https://man.openbsd.org/ssh",
-    summary: "No hubo coincidencias utilizables en la búsqueda en vivo. Esta referencia resume autenticación SSH y enlaza al manual oficial.",
-    content: "## Autenticación con claves SSH\n\nSSH permite autenticar una cuenta remota con un par de claves. La clave privada permanece en tu equipo; instala únicamente la clave pública en el servidor.\n\nGenera una clave Ed25519 y úsala para conectarte:\n\n```bash\nssh-keygen -t ed25519\nssh user@servidor\n```\n\nComprueba siempre la identidad del servidor y restringe los permisos de los archivos de clave.",
-  },
-  docker: {
-    title: "Referencia local: ciclo de vida de Docker",
-    url: "https://docs.docker.com/",
-    summary: "No hubo coincidencias utilizables en la búsqueda en vivo. Esta referencia resume imágenes y contenedores y enlaza a la documentación oficial.",
-    content: "## Imágenes y contenedores\n\nUna imagen contiene las capas necesarias para crear un contenedor. Un contenedor es una instancia aislada que ejecuta un proceso y puede iniciarse, inspeccionarse y detenerse.\n\n```bash\ndocker run -d --name web -p 8080:80 nginx\ndocker ps\ndocker logs web\n```\n\nGuarda los datos persistentes en volúmenes y evita incluir secretos dentro de las imágenes.",
-  },
-  postgres: {
-    title: "Referencia local: consultas SQL en PostgreSQL",
-    url: "https://www.postgresql.org/docs/current/",
-    summary: "No hubo coincidencias utilizables en la búsqueda en vivo. Esta referencia resume consultas SQL y enlaza al manual oficial de PostgreSQL.",
-    content: "## Consultar y relacionar datos\n\nSELECT elige las columnas, FROM indica las tablas y WHERE filtra filas. JOIN permite combinar registros relacionados mediante claves.\n\n```sql\nSELECT clientes.nombre, pedidos.total\nFROM clientes\nJOIN pedidos ON pedidos.cliente_id = clientes.id\nWHERE pedidos.total > 0;\n```\n\nAntes de ejecutar UPDATE o DELETE, verifica que la condición WHERE identifique las filas esperadas.",
-  },
-  typescript: {
-    title: "Referencia local: tipos y funciones de TypeScript",
-    url: "https://www.typescriptlang.org/docs/handbook/",
-    summary: "No hubo coincidencias utilizables en la búsqueda en vivo. Esta referencia resume el sistema de tipos y enlaza al handbook oficial.",
-    content: "## Tipos y funciones\n\nTypeScript comprueba que los valores usados por un programa coincidan con sus tipos. Las anotaciones de parámetros y el tipo de retorno documentan el contrato de una función.\n\n```ts\nfunction saludar(nombre: string): string {\n  return `Hola, ${nombre}`;\n}\n```\n\nActiva strict en tsconfig para detectar más errores antes de ejecutar el programa.",
-  },
-};
-
-const buildOfflineReference = (module: DocModule, query: string): WebDocumentationResult => {
-  const reference = OFFLINE_REFERENCES[module];
-  return {
-    ...reference,
-    summary: `${reference.summary} Consulta: “${query}”.`,
-    publishedAt: null,
-    retrievedAt: new Date().toISOString(),
-    language: "es",
-    isFallback: true,
-  };
-};
 
 const decodeHtml = (value: string) =>
   value
@@ -372,25 +332,25 @@ export async function GET(request: NextRequest) {
   const tokens = queryTokens(query);
 
   try {
-    let candidates: SearchCandidate[] = [];
-    try {
-      candidates = await findCandidates(docModule, query, tokens);
-    } catch (error) {
-      console.error("No se pudieron localizar páginas de documentación; se usará la referencia local:", error);
-    }
-    const sourceResults = (await Promise.all(candidates.slice(0, 3).map(fetchDocumentation)))
+    const candidates = await findCandidates(docModule, query, tokens);
+    const downloadedResults = (await Promise.all(candidates.slice(0, 3).map(fetchDocumentation)))
       .filter((result): result is WebDocumentationResult => result !== null)
       .map((result) => ({
         ...result,
         summary: result.summary || result.content.slice(0, 300).replace(/\s+/g, " ").trim(),
-      }))
-      .filter((result) => relevanceScore(`${result.title} ${result.summary} ${result.content}`, tokens) > 0);
+      }));
+    if (candidates.length > 0 && downloadedResults.length === 0) {
+      throw new Error("Se encontraron páginas oficiales, pero no se pudo descargar su contenido.");
+    }
+    const sourceResults = downloadedResults.filter((result) =>
+      relevanceScore(`${result.title} ${result.summary} ${result.content}`, tokens) > 0,
+    );
     if (sourceResults.length === 0) {
       return NextResponse.json({
         query,
         module: docModule,
         searchedAt: new Date().toISOString(),
-        results: [buildOfflineReference(docModule, query)],
+        results: [],
       });
     }
     const results = await Promise.all(sourceResults.map(async (result) => {

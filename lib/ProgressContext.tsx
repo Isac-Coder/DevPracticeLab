@@ -11,6 +11,13 @@ export interface ModuleProgress {
   lastPracticed: string | null;
 }
 
+export interface ModuleCompletionProgress {
+  challengesCompleted: number;
+  challengesTotal: number;
+  courseLessonsCompleted: number;
+  courseLessonsTotal: number;
+}
+
 export interface ProgressState {
   ssh: ModuleProgress;
   docker: ModuleProgress;
@@ -50,6 +57,7 @@ const initialProgress: ProgressState = {
 
 interface ProgressContextType {
   progress: ProgressState;
+  completions: Record<ModuleType, ModuleCompletionProgress>;
   recordCommand: (module: ModuleType, rawCommand: string) => void;
   getModuleStats: (module: ModuleType) => {
     name: string;
@@ -60,6 +68,10 @@ interface ProgressContextType {
     lastPracticed: string | null;
     targetCommands: string[];
     completedTargets: string[];
+    challengesCompleted: number;
+    challengesTotal: number;
+    courseLessonsCompleted: number;
+    courseLessonsTotal: number;
   };
   overallPercentage: number;
   totalCommandsExecuted: number;
@@ -68,48 +80,122 @@ interface ProgressContextType {
 
 const ProgressContext = createContext<ProgressContextType | undefined>(undefined);
 
+const emptyCompletions: Record<ModuleType, ModuleCompletionProgress> = {
+  ssh: { challengesCompleted: 0, challengesTotal: 50, courseLessonsCompleted: 0, courseLessonsTotal: 50 },
+  docker: { challengesCompleted: 0, challengesTotal: 50, courseLessonsCompleted: 0, courseLessonsTotal: 50 },
+  postgres: { challengesCompleted: 0, challengesTotal: 50, courseLessonsCompleted: 0, courseLessonsTotal: 50 },
+  typescript: { challengesCompleted: 0, challengesTotal: 50, courseLessonsCompleted: 0, courseLessonsTotal: 50 },
+};
+
+const moduleFromChallengeId = (challengeId: string): ModuleType | null => {
+  const moduleKey = challengeId.split("-w")[0];
+  return moduleKey === "ssh" || moduleKey === "docker" || moduleKey === "postgres" || moduleKey === "typescript"
+    ? moduleKey
+    : null;
+};
+
+const moduleFromCourseProgressKey = (progressKey: string): ModuleType | null => {
+  const [moduleKey] = progressKey.split(":");
+  return moduleKey === "ssh" || moduleKey === "docker" || moduleKey === "postgres" || moduleKey === "typescript"
+    ? moduleKey
+    : null;
+};
+
 export function ProgressProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   const [progress, setProgress] = useState<ProgressState>(initialProgress);
+  const [completions, setCompletions] = useState<Record<ModuleType, ModuleCompletionProgress>>(emptyCompletions);
 
   const storageKey = user ? `devpracticelab_progress_${user.email}` : "devpracticelab_progress_guest";
 
   // Load from localStorage whenever user or storageKey changes
   useEffect(() => {
     if (typeof window === "undefined") return;
-    try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        setProgress({
-          ssh: {
-            commandsExecuted: parsed.ssh?.commandsExecuted || 0,
-            uniqueCommands: parsed.ssh?.uniqueCommands || [],
-            lastPracticed: parsed.ssh?.lastPracticed || null,
-          },
-          docker: {
-            commandsExecuted: parsed.docker?.commandsExecuted || 0,
-            uniqueCommands: parsed.docker?.uniqueCommands || [],
-            lastPracticed: parsed.docker?.lastPracticed || null,
-          },
-          postgres: {
-            commandsExecuted: parsed.postgres?.commandsExecuted || 0,
-            uniqueCommands: parsed.postgres?.uniqueCommands || [],
-            lastPracticed: parsed.postgres?.lastPracticed || null,
-          },
-          typescript: {
-            commandsExecuted: parsed.typescript?.commandsExecuted || 0,
-            uniqueCommands: parsed.typescript?.uniqueCommands || [],
-            lastPracticed: parsed.typescript?.lastPracticed || null,
-          },
-        });
-      } else {
+    const timeout = window.setTimeout(() => {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          setProgress({
+            ssh: {
+              commandsExecuted: parsed.ssh?.commandsExecuted || 0,
+              uniqueCommands: parsed.ssh?.uniqueCommands || [],
+              lastPracticed: parsed.ssh?.lastPracticed || null,
+            },
+            docker: {
+              commandsExecuted: parsed.docker?.commandsExecuted || 0,
+              uniqueCommands: parsed.docker?.uniqueCommands || [],
+              lastPracticed: parsed.docker?.lastPracticed || null,
+            },
+            postgres: {
+              commandsExecuted: parsed.postgres?.commandsExecuted || 0,
+              uniqueCommands: parsed.postgres?.uniqueCommands || [],
+              lastPracticed: parsed.postgres?.lastPracticed || null,
+            },
+            typescript: {
+              commandsExecuted: parsed.typescript?.commandsExecuted || 0,
+              uniqueCommands: parsed.typescript?.uniqueCommands || [],
+              lastPracticed: parsed.typescript?.lastPracticed || null,
+            },
+          });
+        } else {
+          setProgress(initialProgress);
+        }
+      } catch {
         setProgress(initialProgress);
       }
-    } catch {
-      setProgress(initialProgress);
-    }
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [storageKey]);
+
+  useEffect(() => {
+    if (!user) {
+      const timeout = window.setTimeout(() => setCompletions(emptyCompletions), 0);
+      return () => window.clearTimeout(timeout);
+    }
+
+    let cancelled = false;
+    const refreshCompletions = async () => {
+      try {
+        const [challengeResponse, courseResponse] = await Promise.all([
+          fetch("/api/challenges/completions", { cache: "no-store" }),
+          fetch("/api/courses/progress", { cache: "no-store" }),
+        ]);
+        if (!challengeResponse.ok || !courseResponse.ok) return;
+        const challengeData: { completed?: unknown } = await challengeResponse.json();
+        const courseData: { progress?: unknown } = await courseResponse.json();
+        const next = structuredClone(emptyCompletions);
+
+        if (Array.isArray(challengeData.completed)) {
+          for (const challengeId of challengeData.completed) {
+            if (typeof challengeId !== "string") continue;
+            const moduleKey = moduleFromChallengeId(challengeId);
+            if (moduleKey) next[moduleKey].challengesCompleted += 1;
+          }
+        }
+
+        if (typeof courseData.progress === "object" && courseData.progress !== null && !Array.isArray(courseData.progress)) {
+          for (const [progressKey, lessons] of Object.entries(courseData.progress)) {
+            const moduleKey = moduleFromCourseProgressKey(progressKey);
+            if (moduleKey && Array.isArray(lessons)) {
+              next[moduleKey].courseLessonsCompleted += lessons.filter((lesson) => typeof lesson === "string").length;
+            }
+          }
+        }
+
+        if (!cancelled) setCompletions(next);
+      } catch (error) {
+        console.error("No se pudieron cargar los hitos de progreso:", error);
+      }
+    };
+
+    void refreshCompletions();
+    const interval = window.setInterval(refreshCompletions, 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [user]);
 
   // Save to localStorage whenever progress changes
   const saveProgress = useCallback(
@@ -164,14 +250,18 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
     (module: ModuleType) => {
       const mod = progress[module];
       const targetInfo = MODULE_TARGETS[module];
+      const moduleCompletions = completions[module];
       const completedTargets = targetInfo.targetCommands.filter((t) =>
         mod.uniqueCommands.includes(t.toLowerCase())
       );
 
-      // Percentage is calculated based on completed target goals + activity weighting
-      const targetPercent = (completedTargets.length / targetInfo.totalGoal) * 100;
-      const activityBonus = Math.min(20, mod.commandsExecuted * 2);
-      const calculated = Math.min(100, Math.round(targetPercent * 0.8 + activityBonus));
+      const challengePercent = (moduleCompletions.challengesCompleted / moduleCompletions.challengesTotal) * 100;
+      const coursePercent = (moduleCompletions.courseLessonsCompleted / moduleCompletions.courseLessonsTotal) * 100;
+      const commandPercent = (completedTargets.length / targetInfo.totalGoal) * 100;
+      const activityPercent = Math.min(100, mod.commandsExecuted * 5);
+      const calculated = Math.min(100, Math.round(
+        challengePercent * 0.5 + coursePercent * 0.3 + commandPercent * 0.15 + activityPercent * 0.05,
+      ));
 
       return {
         name: targetInfo.name,
@@ -182,9 +272,13 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
         lastPracticed: mod.lastPracticed,
         targetCommands: targetInfo.targetCommands,
         completedTargets,
+        challengesCompleted: moduleCompletions.challengesCompleted,
+        challengesTotal: moduleCompletions.challengesTotal,
+        courseLessonsCompleted: moduleCompletions.courseLessonsCompleted,
+        courseLessonsTotal: moduleCompletions.courseLessonsTotal,
       };
     },
-    [progress]
+    [completions, progress]
   );
 
   const statsSSH = getModuleStats("ssh");
@@ -210,6 +304,7 @@ export function ProgressProvider({ children }: { children: React.ReactNode }) {
     <ProgressContext.Provider
       value={{
         progress,
+        completions,
         recordCommand,
         getModuleStats,
         overallPercentage,
