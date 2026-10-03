@@ -511,41 +511,6 @@ export async function updateUser(
   if (connectionString) {
     await initDatabase();
     const pool = getPool();
-    // Simplified for demonstration: only email/username
-    const res = await pool.query(
-      `UPDATE users SET email = $1, username = $2 WHERE id = $3 RETURNING *`,
-      [data.email, data.username, id]
-    );
-    return res.rows[0];
-  }
-  const user = global.__mockUsers!.find((u) => u.id === Number(id));
-  if (!user) throw new Error("Usuario no encontrado");
-  if (data.email) user.email = data.email;
-  if (data.username) user.username = data.username;
-  return user;
-}
-
-export async function updateUserLastSubscriptionUpdate(
-  id: number | string
-): Promise<void> {
-  const connectionString = getConnectionString();
-  if (connectionString) {
-    await initDatabase();
-    const pool = getPool();
-    await pool.query(
-      `UPDATE users SET last_subscription_update = CURRENT_TIMESTAMP WHERE id = $1`,
-      [id]
-    );
-  } else {
-    // Mock fallback
-    const user = global.__mockUsers!.find((u) => u.id === Number(id));
-    if (user) {
-        user.last_subscription_update = new Date();
-    }
-  }
-}
-
-    const pool = getPool();
     const updates: string[] = [];
     const values: unknown[] = [];
     let idx = 1;
@@ -569,7 +534,7 @@ export async function updateUserLastSubscriptionUpdate(
       UPDATE users
       SET ${updates.join(", ")}
       WHERE id = $${idx}
-      RETURNING id, email, username, password_hash, created_at, updated_at
+      RETURNING id, email, username, password_hash, created_at, updated_at, last_subscription_update
     `;
 
     const res = await pool.query(queryStr, values);
@@ -589,6 +554,27 @@ export async function updateUserLastSubscriptionUpdate(
   user.updated_at = new Date();
   return user;
 }
+
+export async function updateUserLastSubscriptionUpdate(
+  id: number | string
+): Promise<void> {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    const pool = getPool();
+    await pool.query(
+      `UPDATE users SET last_subscription_update = CURRENT_TIMESTAMP WHERE id = $1`,
+      [id]
+    );
+  } else {
+    // Mock fallback
+    const user = global.__mockUsers!.find((u) => u.id === Number(id));
+    if (user) {
+        user.last_subscription_update = new Date();
+    }
+  }
+}
+
 
 // ==========================================
 // dont_stop Table Operations
