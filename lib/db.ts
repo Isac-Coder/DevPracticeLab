@@ -12,6 +12,7 @@ declare global {
     password_hash: string;
     created_at: Date;
     updated_at: Date;
+    last_subscription_update: Date;
   }> | undefined;
   // eslint-disable-next-line no-var
   var __mockDontStop: Array<{
@@ -207,6 +208,15 @@ export async function initDatabase() {
         updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    const userCols = await client.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'users' AND column_name = 'last_subscription_update'
+    `);
+    if (userCols.rowCount === 0) {
+        await client.query(`ALTER TABLE users ADD COLUMN last_subscription_update TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP`);
+    }
 
     await client.query(`
       CREATE TABLE IF NOT EXISTS dont_stop (
@@ -412,6 +422,7 @@ export interface UserRecord {
   password_hash: string;
   created_at: Date;
   updated_at: Date;
+  last_subscription_update: Date;
 }
 
 export async function createUser(
@@ -424,9 +435,9 @@ export async function createUser(
     await initDatabase();
     const pool = getPool();
     const res = await pool.query(
-      `INSERT INTO users (email, username, password_hash)
-       VALUES ($1, $2, $3)
-       RETURNING id, email, username, password_hash, created_at, updated_at`,
+      `INSERT INTO users (email, username, password_hash, last_subscription_update)
+       VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+       RETURNING id, email, username, password_hash, created_at, updated_at, last_subscription_update`,
       [email.toLowerCase().trim(), username.trim(), passwordHash]
     );
     return res.rows[0];
@@ -446,6 +457,7 @@ export async function createUser(
     password_hash: passwordHash,
     created_at: new Date(),
     updated_at: new Date(),
+    last_subscription_update: new Date(),
   };
   global.__mockUsers!.push(newUser);
   return newUser;
@@ -457,7 +469,7 @@ export async function findUserByEmail(email: string): Promise<UserRecord | null>
     await initDatabase();
     const pool = getPool();
     const res = await pool.query(
-      `SELECT id, email, username, password_hash, created_at, updated_at
+      `SELECT id, email, username, password_hash, created_at, updated_at, last_subscription_update
        FROM users
        WHERE LOWER(email) = LOWER($1)
        LIMIT 1`,
@@ -478,7 +490,7 @@ export async function findUserById(id: number | string): Promise<UserRecord | nu
     await initDatabase();
     const pool = getPool();
     const res = await pool.query(
-      `SELECT id, email, username, password_hash, created_at, updated_at
+      `SELECT id, email, username, password_hash, created_at, updated_at, last_subscription_update
        FROM users
        WHERE id = $1
        LIMIT 1`,
@@ -498,6 +510,41 @@ export async function updateUser(
   const connectionString = getConnectionString();
   if (connectionString) {
     await initDatabase();
+    const pool = getPool();
+    // Simplified for demonstration: only email/username
+    const res = await pool.query(
+      `UPDATE users SET email = $1, username = $2 WHERE id = $3 RETURNING *`,
+      [data.email, data.username, id]
+    );
+    return res.rows[0];
+  }
+  const user = global.__mockUsers!.find((u) => u.id === Number(id));
+  if (!user) throw new Error("Usuario no encontrado");
+  if (data.email) user.email = data.email;
+  if (data.username) user.username = data.username;
+  return user;
+}
+
+export async function updateUserLastSubscriptionUpdate(
+  id: number | string
+): Promise<void> {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    const pool = getPool();
+    await pool.query(
+      `UPDATE users SET last_subscription_update = CURRENT_TIMESTAMP WHERE id = $1`,
+      [id]
+    );
+  } else {
+    // Mock fallback
+    const user = global.__mockUsers!.find((u) => u.id === Number(id));
+    if (user) {
+        user.last_subscription_update = new Date();
+    }
+  }
+}
+
     const pool = getPool();
     const updates: string[] = [];
     const values: unknown[] = [];
