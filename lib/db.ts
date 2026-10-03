@@ -299,7 +299,6 @@ export async function initDatabase() {
           user_id ${userIdColumnType} NOT NULL REFERENCES users(id) ON DELETE CASCADE,
           module_id INTEGER NOT NULL REFERENCES available_modules(id) ON DELETE CASCADE,
           subscribed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          last_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           UNIQUE (user_id, module_id)
         );
       `);
@@ -314,7 +313,6 @@ export async function initDatabase() {
           user_id TEXT NOT NULL,
           module_id INTEGER NOT NULL,
           subscribed_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-          last_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
           UNIQUE (user_id, module_id)
         );
       `);
@@ -369,12 +367,6 @@ export async function initDatabase() {
           IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_api_keys_user_id_provider_key') THEN
             ALTER TABLE user_api_keys ADD CONSTRAINT user_api_keys_user_id_provider_key UNIQUE (user_id, provider);
           END IF;
-        END $$;
-        DO $$
-        BEGIN
-          ALTER TABLE user_module_subscriptions ADD COLUMN IF NOT EXISTS last_updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
-        EXCEPTION
-          WHEN duplicate_column THEN NULL;
         END $$;
       `);
     } catch (migErr) {
@@ -685,25 +677,6 @@ export async function getUserSubscribedModules(userId: number | string): Promise
   return global.__mockAvailableModules!.filter((module) => subscribedModuleIds.includes(module.id));
 }
 
-export async function getLastSubscriptionUpdate(userId: number | string): Promise<Date | null> {
-  if (getConnectionString()) {
-    await initDatabase();
-    const pool = getPool();
-    const res = await pool.query(
-      `SELECT MAX(last_updated_at) as last_update
-       FROM user_module_subscriptions
-       WHERE user_id = $1`,
-      [String(userId)]
-    );
-    return res.rows[0]?.last_update ? new Date(res.rows[0].last_update) : null;
-  }
-  const userIdNum = Number(userId);
-  const userSubs = global.__mockUserSubscriptions!.filter((sub) => sub.user_id === userIdNum);
-  if (userSubs.length === 0) return null;
-  userSubs.sort((a, b) => b.subscribed_at.getTime() - a.subscribed_at.getTime());
-  return userSubs[0].subscribed_at;
-}
-
 export async function setUserModuleSubscriptions(
   userId: number | string,
   moduleSlugs: string[]
@@ -728,8 +701,7 @@ export async function setUserModuleSubscriptions(
           .join(", ");
 
         await pool.query(
-          `INSERT INTO user_module_subscriptions (user_id, module_id, last_updated_at)
-           VALUES ${moduleRows.rows.map((row) => `(${Number(userId)}, ${Number(row.id)}, CURRENT_TIMESTAMP)`).join(", ")}`
+          `INSERT INTO user_module_subscriptions (user_id, module_id) VALUES ${values}`
         );
       }
     }
