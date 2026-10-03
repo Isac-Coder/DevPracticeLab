@@ -712,7 +712,7 @@ export async function setUserModuleSubscriptions(
   if (connectionString) {
     await initDatabase();
     const pool = getPool();
-    const normalizedSlugs = [...new Set((moduleSlugs || []).map((slug) => String(slug).trim().toLowerCase()).filter(Boolean))];
+    const normalizedSlugs = [...new Set((moduleSlugs || []).map((slug: string) => String(slug).trim().toLowerCase()).filter(Boolean))];
 
     await pool.query(`DELETE FROM user_module_subscriptions WHERE user_id = $1`, [userId]);
 
