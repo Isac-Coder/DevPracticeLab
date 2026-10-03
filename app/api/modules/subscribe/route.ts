@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      subscribedModules: savedModules.map((module) => module.slug),
+      subscribedModules: savedModules.map((module: any) => module.slug),
       message: "Suscripciones de módulos actualizadas correctamente.",
     });
   } catch (error) {
