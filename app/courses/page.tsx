@@ -17,9 +17,21 @@ import {
   Terminal,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import {
+  Sparkles,
+  BookMarked,
+  CheckCircle2,
+  HelpCircle,
+  Trophy,
+  GraduationCap,
+  Languages,
+} from "lucide-react";
 import Navbar from "@/app/components/Navbar";
 import { useAuth } from "@/lib/AuthContext";
 import { useChallengeMode } from "@/lib/ChallengeModeContext";
+import { usePlatformMode } from "@/lib/PlatformModeContext";
+import { TOP_NOTCH_COURSES, type EnglishCourseLevel, type EnglishLesson } from "@/lib/englishCoursesData";
+import { TOP_NOTCH_LEVELS } from "@/lib/topNotchData";
 
 type ModuleId = "ssh" | "docker" | "postgres" | "typescript";
 type LevelName = "Principiante" | "Básico" | "Normal" | "Avanzado" | "Experto";
@@ -482,6 +494,7 @@ const loadLocalCourseProgress = (storageKey: string) => {
 export default function CoursesPage() {
   const { user, loading: authLoading } = useAuth();
   const { setPracticeContext } = useChallengeMode();
+  const { isEnglish } = usePlatformMode();
   const [selectedModule, setSelectedModule] = useState<ModuleId>("ssh");
   const [selectedLevel, setSelectedLevel] = useState<LevelName>("Principiante");
   const [openLesson, setOpenLesson] = useState(0);
@@ -492,6 +505,59 @@ export default function CoursesPage() {
   const [progressLoadError, setProgressLoadError] = useState("");
   const [savingExerciseKey, setSavingExerciseKey] = useState<string | null>(null);
   const progressStorageKey = `devpracticelab_course_progress_${encodeURIComponent(user?.email ?? "guest")}`;
+
+  // English Mode State
+  const [selectedEnglishCourseId, setSelectedEnglishCourseId] = useState<string>("fundamentals");
+  const [selectedEnglishLessonIdx, setSelectedEnglishLessonIdx] = useState<number>(0);
+  const [selectedDrillOption, setSelectedDrillOption] = useState<Record<string, string>>({});
+  const [drillFeedback, setDrillFeedback] = useState<Record<string, { ok: boolean; message: string; explanation: string } | null>>({});
+  const [completedEnglishLessons, setCompletedEnglishLessons] = useState<string[]>([]);
+
+  const currentEnglishCourse = TOP_NOTCH_COURSES.find((c) => c.id === selectedEnglishCourseId) || TOP_NOTCH_COURSES[0];
+  const currentEnglishLesson = currentEnglishCourse.lessons[selectedEnglishLessonIdx] || currentEnglishCourse.lessons[0];
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`topnotch_courses_completed_${user?.email ?? "guest"}`);
+      if (saved) {
+        setCompletedEnglishLessons(JSON.parse(saved));
+      }
+    } catch {
+      // Ignore
+    }
+  }, [user?.email]);
+
+  const toggleEnglishLessonCompleted = (lessonId: string) => {
+    const updated = completedEnglishLessons.includes(lessonId)
+      ? completedEnglishLessons.filter((id) => id !== lessonId)
+      : [...completedEnglishLessons, lessonId];
+    setCompletedEnglishLessons(updated);
+    try {
+      localStorage.setItem(`topnotch_courses_completed_${user?.email ?? "guest"}`, JSON.stringify(updated));
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleDrillSubmit = (drillLesson: EnglishLesson) => {
+    const selected = selectedDrillOption[drillLesson.id];
+    if (!selected) return;
+
+    const isCorrect = selected === drillLesson.interactiveDrill.correctAnswer;
+    setDrillFeedback((prev) => ({
+      ...prev,
+      [drillLesson.id]: {
+        ok: isCorrect,
+        message: isCorrect ? "¡Excelente! Respuesta correcta." : "Incorrecto. Revisa la regla gramatical e inténtalo de nuevo.",
+        explanation: drillLesson.interactiveDrill.explanation,
+      },
+    }));
+
+    if (isCorrect && !completedEnglishLessons.includes(drillLesson.id)) {
+      toggleEnglishLessonCompleted(drillLesson.id);
+    }
+  };
+
   const currentCourse = courses[selectedModule];
   const Icon = currentCourse.icon;
   const tone = toneClasses[currentCourse.tone];
@@ -639,6 +705,281 @@ export default function CoursesPage() {
     setSelectedLevel(levelName);
     setOpenLesson(0);
   };
+
+  if (isEnglish) {
+    return (
+      <div className="flex min-h-screen flex-col bg-[#030814] text-slate-100 transition-colors duration-300">
+        <Navbar />
+
+        <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-8 sm:px-6 lg:py-12 space-y-10">
+          {/* Hero Section */}
+          <section className="border-b border-blue-900/50 pb-8">
+            <div className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-sky-400">
+              <Languages className="h-4 w-4" />
+              <span>Programa de Cursos Top Notch & Summit (A1 — C1)</span>
+            </div>
+            <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
+              <div>
+                <h1 className="text-3xl font-black text-white sm:text-4xl">
+                  Cursos Estructurados por Libro
+                </h1>
+                <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate-300 sm:text-base">
+                  Aprende paso a paso con las unidades pedagógicas de Top Notch. Cada lección integra metas comunicativas, gramática activa, vocabulario aplicado y ejercicios interactivos con feedback en tiempo real.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-4 rounded-2xl border border-sky-400/30 bg-blue-950/60 p-4 shadow-lg shadow-sky-500/5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-sky-500/20 text-sky-300">
+                  <GraduationCap className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs text-slate-400 font-medium">Progreso Global de Lecciones</p>
+                  <p className="text-lg font-bold text-white">
+                    {completedEnglishLessons.length} lecciones completadas
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Book Level Tabs */}
+            <div className="mt-6 flex flex-wrap items-center gap-2">
+              {TOP_NOTCH_COURSES.map((course) => {
+                const isSelected = selectedEnglishCourseId === course.id;
+                const completedInThisLevel = course.lessons.filter((l) => completedEnglishLessons.includes(l.id)).length;
+                return (
+                  <button
+                    key={course.id}
+                    onClick={() => {
+                      setSelectedEnglishCourseId(course.id);
+                      setSelectedEnglishLessonIdx(0);
+                    }}
+                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? "border border-sky-400 bg-sky-500/20 text-white shadow-md shadow-sky-500/10"
+                        : "border border-blue-900/60 bg-blue-950/40 text-slate-300 hover:border-blue-700 hover:text-white"
+                    }`}
+                  >
+                    <span className="rounded-md bg-sky-400/20 px-1.5 py-0.5 font-mono text-[10px] text-sky-300">
+                      {course.code}
+                    </span>
+                    <span className="truncate max-w-[130px] sm:max-w-none">{course.bookTitle}</span>
+                    <span className="rounded-full bg-blue-900/80 px-2 py-0.5 text-[10px] text-sky-300">
+                      {completedInThisLevel}/{course.lessons.length}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          {/* Active Course View */}
+          <div className="grid gap-8 lg:grid-cols-[300px_1fr]">
+            {/* Left: Units / Lessons List */}
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-blue-900/60 bg-[#07152b] p-5">
+                <div className="mb-4">
+                  <span className="text-xs font-bold text-sky-400 uppercase tracking-wider">{currentEnglishCourse.cefr}</span>
+                  <h3 className="text-lg font-bold text-white mt-0.5">{currentEnglishCourse.bookTitle}</h3>
+                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">{currentEnglishCourse.description}</p>
+                </div>
+
+                <div className="space-y-2 border-t border-blue-900/50 pt-4">
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Unidades del Libro:</p>
+                  <div className="max-h-[60vh] overflow-y-auto pr-2 space-y-2 scrollbar-thin scrollbar-thumb-blue-900/50 scrollbar-track-transparent">
+                    {currentEnglishCourse.lessons.map((l, idx) => {
+                      const isSelected = selectedEnglishLessonIdx === idx;
+                      const isDone = completedEnglishLessons.includes(l.id);
+                      return (
+                        <button
+                          key={l.id}
+                          onClick={() => setSelectedEnglishLessonIdx(idx)}
+                          className={`w-full text-left rounded-xl p-3 text-xs transition-all flex items-start justify-between gap-2.5 ${
+                            isSelected
+                              ? "bg-blue-600/30 border border-sky-400/60 text-white font-bold shadow-sm"
+                              : "bg-blue-950/40 hover:bg-blue-950/80 text-slate-300 border border-transparent"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2.5 min-w-0 flex-1">
+                            <span className={`flex h-5 w-5 shrink-0 mt-0.5 items-center justify-center rounded-full text-[10px] font-bold ${
+                              isDone ? "bg-sky-400 text-zinc-950 shadow-xs" : "bg-blue-900/80 text-sky-300"
+                            }`}>
+                              {isDone ? "✓" : idx + 1}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-xs leading-snug break-words">{l.title}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1 break-words">{l.grammarFocus}</p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="mt-6 pt-4 border-t border-blue-900/50">
+                  <Link
+                    href={`/challenges?level=${currentEnglishCourse.id}`}
+                    className="flex items-center justify-center gap-2 w-full rounded-xl bg-sky-400 hover:bg-sky-300 text-zinc-950 py-2.5 text-xs font-bold transition shadow-md shadow-sky-500/10"
+                  >
+                    <Trophy className="h-4 w-4" />
+                    <span>Retos de este Libro</span>
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Active Lesson Detail */}
+            <div className="space-y-6">
+              <div className="rounded-2xl border border-blue-900/60 bg-[#07152b] p-6 sm:p-8 shadow-xl shadow-blue-950/20 space-y-6">
+                {/* Lesson Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-blue-900/50">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="rounded-md bg-sky-500/20 px-2 py-0.5 text-[11px] font-bold text-sky-300">
+                        {currentEnglishLesson.cefrLevel}
+                      </span>
+                      <span className="text-xs text-slate-400 font-medium">Unidad {currentEnglishLesson.unitNumber}</span>
+                    </div>
+                    <h2 className="text-2xl font-bold text-white">{currentEnglishLesson.title}</h2>
+                  </div>
+
+                  <button
+                    onClick={() => toggleEnglishLessonCompleted(currentEnglishLesson.id)}
+                    className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-bold transition ${
+                      completedEnglishLessons.includes(currentEnglishLesson.id)
+                        ? "bg-sky-500/20 border border-sky-400/40 text-sky-300"
+                        : "bg-blue-950 border border-blue-800 text-slate-300 hover:border-sky-400"
+                    }`}
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>
+                      {completedEnglishLessons.includes(currentEnglishLesson.id)
+                        ? "Lección Completada ✓"
+                        : "Marcar como Completada"}
+                    </span>
+                  </button>
+                </div>
+
+                {/* Communicative Goal Banner */}
+                <div className="rounded-xl border border-sky-500/30 bg-blue-950/60 p-4">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-sky-400 mb-1">
+                    Meta Comunicativa Top Notch:
+                  </p>
+                  <p className="text-sm font-semibold text-white">
+                    {currentEnglishLesson.communicativeGoal}
+                  </p>
+                </div>
+
+                {/* Grammar & Vocabulary Breakdown */}
+                <div className="grid gap-6 md:grid-cols-2">
+                  <div className="rounded-xl border border-blue-900/60 bg-blue-950/30 p-5 space-y-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-sky-300 flex items-center gap-1.5">
+                      <Sparkles className="h-3.5 w-3.5 text-sky-400" />
+                      Enfoque Gramatical
+                    </h4>
+                    <p className="text-xs font-bold text-white">{currentEnglishLesson.grammarFocus}</p>
+                    <p className="text-xs text-slate-300 leading-relaxed pt-1">{currentEnglishLesson.explanation}</p>
+                  </div>
+
+                  <div className="rounded-xl border border-blue-900/60 bg-blue-950/30 p-5 space-y-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-sky-300 flex items-center gap-1.5">
+                      <BookMarked className="h-3.5 w-3.5 text-sky-400" />
+                      Vocabulario Clave de la Unidad
+                    </h4>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {currentEnglishLesson.vocabularyKeywords.map((w, idx) => (
+                        <span key={idx} className="rounded-md bg-sky-950/80 border border-sky-500/20 px-2.5 py-1 text-xs text-sky-200 font-medium">
+                          {w}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Dialogue Scenario */}
+                <div className="rounded-xl border border-blue-900/60 bg-blue-950/30 p-5 space-y-3">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-sky-300 flex items-center gap-1.5">
+                    <Languages className="h-4 w-4 text-sky-400" />
+                    Diálogo Modelo & Conversación Práctica
+                  </h4>
+                  <div className="space-y-3 pt-1">
+                    {currentEnglishLesson.dialogue.map((line, idx) => (
+                      <div key={idx} className="border-l-2 border-sky-400/60 pl-3.5 space-y-0.5">
+                        <p className="text-xs font-bold text-white">
+                          <span className="text-sky-300 mr-1.5 font-mono">{line.speaker}:</span>
+                          &ldquo;{line.text}&rdquo;
+                        </p>
+                        <p className="text-[11px] text-slate-400 italic">{line.translation}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Interactive Drill Exercise */}
+                <div className="rounded-xl border border-sky-400/40 bg-[#06142a] p-6 space-y-4 shadow-lg shadow-sky-950/40">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-sky-400">
+                    <HelpCircle className="h-4 w-4" />
+                    <span>Ejercicio Interactivo de la Lección</span>
+                  </div>
+
+                  <p className="text-sm font-bold text-white">
+                    {currentEnglishLesson.interactiveDrill.question}
+                  </p>
+
+                  <div className="space-y-2">
+                    {currentEnglishLesson.interactiveDrill.options.map((option, idx) => {
+                      const isSelected = selectedDrillOption[currentEnglishLesson.id] === option;
+                      return (
+                        <label
+                          key={idx}
+                          className={`flex items-center gap-3 rounded-xl p-3 text-xs cursor-pointer transition border ${
+                            isSelected
+                              ? "border-sky-400 bg-sky-500/20 text-white font-semibold"
+                              : "border-blue-900/60 bg-blue-950/40 text-slate-300 hover:border-blue-700"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name={`drill-${currentEnglishLesson.id}`}
+                            value={option}
+                            checked={isSelected}
+                            onChange={() => setSelectedDrillOption((prev) => ({ ...prev, [currentEnglishLesson.id]: option }))}
+                            className="text-sky-500 focus:ring-sky-400"
+                          />
+                          <span>{option}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <button
+                      onClick={() => handleDrillSubmit(currentEnglishLesson)}
+                      disabled={!selectedDrillOption[currentEnglishLesson.id]}
+                      className="rounded-xl bg-sky-400 hover:bg-sky-300 disabled:opacity-50 text-zinc-950 font-bold text-xs px-5 py-2.5 transition shadow-md shadow-sky-500/10"
+                    >
+                      Comprobar Respuesta
+                    </button>
+
+                    {drillFeedback[currentEnglishLesson.id] && (
+                      <div className={`p-3 rounded-xl text-xs flex-1 ${
+                        drillFeedback[currentEnglishLesson.id]?.ok
+                          ? "bg-sky-950/70 border border-sky-400/50 text-sky-200"
+                          : "bg-red-950/60 border border-red-500/40 text-red-200"
+                      }`}>
+                        <p className="font-bold">{drillFeedback[currentEnglishLesson.id]?.message}</p>
+                        <p className="text-[11px] opacity-90 mt-1">{drillFeedback[currentEnglishLesson.id]?.explanation}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-950">

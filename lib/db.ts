@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { ALL_CHALLENGES } from "@/lib/challengesData";
+import { ALL_ENGLISH_CHALLENGES } from "@/lib/englishChallengesData";
 
 declare global {
   // eslint-disable-next-line no-var
@@ -38,6 +39,16 @@ declare global {
     module_id: number;
     subscribed_at: Date;
   }> | undefined;
+  // eslint-disable-next-line no-var
+  var __mockEnglishChallengeCompletions: Array<{
+    user_id: string;
+    challenge_id: string;
+    status: ChallengeStatus;
+    points_earned: number;
+    elapsed_ms: number;
+    completed_at: Date;
+  }> | undefined;
+  var __englishChallengeSchemaReady: boolean | undefined;
   // eslint-disable-next-line no-var
   var __mockUserApiKeys: Array<{
     id: number;
@@ -120,8 +131,18 @@ if (!global.__mockUserApiKeys) global.__mockUserApiKeys = [];
 if (!global.__mockEditorWorkspaces) global.__mockEditorWorkspaces = [];
 if (!global.__mockUserCourseProgress) global.__mockUserCourseProgress = [];
 if (!global.__mockChallengeCompletions) global.__mockChallengeCompletions = [];
+if (!global.__mockEnglishChallengeCompletions) global.__mockEnglishChallengeCompletions = [];
 
 export type ChallengeStatus = "resuelto" | "erroneo" | "faltante";
+
+export interface EnglishChallengeLeaderboardEntry {
+  username: string;
+  levelBadge: string;
+  cefr: string;
+  completedChallenges: number;
+  points: number;
+  accuracy: string;
+}
 
 export interface ChallengeLeaderboardEntry {
   username: string;
@@ -1246,6 +1267,369 @@ export async function getUserCourseProgress(
     }
     return progress;
   }, {});
+}
+
+// ========================================================
+// English Top Notch Challenges & Leaderboard Operations
+// ========================================================
+
+export async function ensureEnglishChallengeTables() {
+  if (global.__englishChallengeSchemaReady) return;
+
+  const pool = getPool();
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS english_challenges (
+      id VARCHAR(100) PRIMARY KEY,
+      book_level VARCHAR(50) NOT NULL,
+      book_title VARCHAR(100) NOT NULL,
+      cefr VARCHAR(20) NOT NULL,
+      week INTEGER NOT NULL CHECK (week > 0),
+      title TEXT NOT NULL,
+      challenge_type VARCHAR(50) NOT NULL,
+      category VARCHAR(100) NOT NULL,
+      points INTEGER NOT NULL DEFAULT 50 CHECK (points >= 0),
+      prompt TEXT NOT NULL,
+      correct_answers JSONB NOT NULL DEFAULT '[]'::jsonb,
+      hint TEXT DEFAULT '',
+      grammar_explanation TEXT DEFAULT '',
+      top_notch_unit TEXT DEFAULT '',
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  const rows = ALL_ENGLISH_CHALLENGES.map((ch) => ({
+    id: ch.id,
+    book_level: ch.bookLevel,
+    book_title: ch.bookTitle,
+    cefr: ch.cefr,
+    week: ch.week,
+    title: ch.title,
+    challenge_type: ch.challengeType,
+    category: ch.category,
+    points: ch.points,
+    prompt: ch.prompt,
+    correct_answers: JSON.stringify(ch.correctAnswers),
+    hint: ch.hint || "",
+    grammar_explanation: ch.grammarExplanation || "",
+    top_notch_unit: ch.topNotchUnit || "",
+  }));
+
+  if (rows.length > 0) {
+    await pool.query(
+      `INSERT INTO english_challenges (
+         id, book_level, book_title, cefr, week, title, challenge_type, category, points, prompt, correct_answers, hint, grammar_explanation, top_notch_unit
+       )
+       SELECT * FROM UNNEST(
+         $1::varchar[],
+         $2::varchar[],
+         $3::varchar[],
+         $4::varchar[],
+         $5::integer[],
+         $6::text[],
+         $7::varchar[],
+         $8::varchar[],
+         $9::integer[],
+         $10::text[],
+         $11::jsonb[],
+         $12::text[],
+         $13::text[],
+         $14::text[]
+       ) AS english_rows(
+         id, book_level, book_title, cefr, week, title, challenge_type, category, points, prompt, correct_answers, hint, grammar_explanation, top_notch_unit
+       )
+       ON CONFLICT (id) DO UPDATE SET
+         book_level = EXCLUDED.book_level,
+         book_title = EXCLUDED.book_title,
+         cefr = EXCLUDED.cefr,
+         week = EXCLUDED.week,
+         title = EXCLUDED.title,
+         challenge_type = EXCLUDED.challenge_type,
+         category = EXCLUDED.category,
+         points = EXCLUDED.points,
+         prompt = EXCLUDED.prompt,
+         correct_answers = EXCLUDED.correct_answers,
+         hint = EXCLUDED.hint,
+         grammar_explanation = EXCLUDED.grammar_explanation,
+         top_notch_unit = EXCLUDED.top_notch_unit`,
+      [
+        rows.map((r) => r.id),
+        rows.map((r) => r.book_level),
+        rows.map((r) => r.book_title),
+        rows.map((r) => r.cefr),
+        rows.map((r) => r.week),
+        rows.map((r) => r.title),
+        rows.map((r) => r.challenge_type),
+        rows.map((r) => r.category),
+        rows.map((r) => r.points),
+        rows.map((r) => r.prompt),
+        rows.map((r) => r.correct_answers),
+        rows.map((r) => r.hint),
+        rows.map((r) => r.grammar_explanation),
+        rows.map((r) => r.top_notch_unit),
+      ]
+    );
+  }
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_english_challenge_progress (
+      user_id TEXT NOT NULL,
+      challenge_id VARCHAR(100) NOT NULL,
+      status VARCHAR(20) NOT NULL DEFAULT 'faltante'
+        CHECK (status IN ('resuelto', 'erroneo', 'faltante')),
+      points_earned INTEGER NOT NULL DEFAULT 0 CHECK (points_earned >= 0),
+      elapsed_ms BIGINT NOT NULL DEFAULT 0 CHECK (elapsed_ms >= 0),
+      completed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, challenge_id),
+      CONSTRAINT user_english_progress_fk
+        FOREIGN KEY (challenge_id) REFERENCES english_challenges(id) ON DELETE CASCADE
+    );
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_english_leaderboard (
+      user_id TEXT PRIMARY KEY,
+      username VARCHAR(100) NOT NULL DEFAULT 'Estudiante',
+      points BIGINT NOT NULL DEFAULT 0 CHECK (points >= 0),
+      completed_challenges INTEGER NOT NULL DEFAULT 0 CHECK (completed_challenges >= 0),
+      level_badge VARCHAR(100) NOT NULL DEFAULT 'Fundamentals Starter',
+      cefr VARCHAR(20) NOT NULL DEFAULT 'A1',
+      accuracy VARCHAR(20) NOT NULL DEFAULT '100%',
+      updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+  global.__englishChallengeSchemaReady = true;
+}
+
+export function computeEnglishBadge(points: number): { badge: string; cefr: string } {
+  if (points >= 1500) return { badge: "Summit Master", cefr: "C1" };
+  if (points >= 1000) return { badge: "Summit Communicator", cefr: "B2+" };
+  if (points >= 700) return { badge: "Top Notch Fluent", cefr: "B1+" };
+  if (points >= 400) return { badge: "Top Notch Explorer", cefr: "A2+" };
+  if (points >= 200) return { badge: "Top Notch Builder", cefr: "A2" };
+  return { badge: "Fundamentals Starter", cefr: "A1" };
+}
+
+export async function saveEnglishChallengeCompletion(
+  userId: number | string,
+  challengeId: string,
+  status: ChallengeStatus = "resuelto",
+  pointsEarned: number = 50,
+  elapsedMs: number = 0,
+): Promise<void> {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    await ensureEnglishChallengeTables();
+    const pool = getPool();
+    await pool.query(
+      `INSERT INTO user_english_challenge_progress (
+         user_id, challenge_id, status, points_earned, elapsed_ms, completed_at
+       ) VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+       ON CONFLICT (user_id, challenge_id) DO UPDATE SET
+         status = EXCLUDED.status,
+         points_earned = EXCLUDED.points_earned,
+         elapsed_ms = EXCLUDED.elapsed_ms,
+         completed_at = CURRENT_TIMESTAMP`,
+      [String(userId), challengeId, status, pointsEarned, elapsedMs],
+    );
+    return;
+  }
+
+  const existing = global.__mockEnglishChallengeCompletions!.find(
+    (c) => c.user_id === String(userId) && c.challenge_id === challengeId,
+  );
+  if (existing) {
+    existing.status = status;
+    existing.points_earned = pointsEarned;
+    existing.elapsed_ms = elapsedMs;
+    existing.completed_at = new Date();
+  } else {
+    global.__mockEnglishChallengeCompletions!.push({
+      user_id: String(userId),
+      challenge_id: challengeId,
+      status,
+      points_earned: pointsEarned,
+      elapsed_ms: elapsedMs,
+      completed_at: new Date(),
+    });
+  }
+}
+
+export async function getEnglishChallengeLeaderboard(): Promise<EnglishChallengeLeaderboardEntry[]> {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    await ensureEnglishChallengeTables();
+    const pool = getPool();
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      // Query real completions joined with users
+      const completionResult = await client.query(
+        `SELECT
+           p.user_id,
+           u.username,
+           p.challenge_id,
+           p.points_earned,
+           p.status
+         FROM user_english_challenge_progress p
+         LEFT JOIN users u ON u.id::text = p.user_id
+         WHERE p.status = 'resuelto'`,
+      );
+
+      const totals = new Map<string, {
+        username: string;
+        points: number;
+        completedChallenges: number;
+      }>();
+
+      for (const row of completionResult.rows) {
+        const uid = String(row.user_id);
+        const cur = totals.get(uid) ?? {
+          username: typeof row.username === "string" ? row.username : "Estudiante",
+          points: 0,
+          completedChallenges: 0,
+        };
+        cur.points += Number(row.points_earned) || 50;
+        cur.completedChallenges += 1;
+        totals.set(uid, cur);
+      }
+
+      // If no completions yet, populate with registered users from users table
+      if (totals.size === 0) {
+        const usersRes = await client.query(`SELECT id, username FROM users LIMIT 10`);
+        for (const u of usersRes.rows) {
+          totals.set(String(u.id), {
+            username: u.username || "Estudiante",
+            points: 0,
+            completedChallenges: 0,
+          });
+        }
+      }
+
+      // Update user_english_leaderboard table
+      await client.query(`DELETE FROM user_english_leaderboard`);
+
+      if (totals.size > 0) {
+        const rowsToInsert = [...totals.entries()].map(([uid, data]) => {
+          const badgeInfo = computeEnglishBadge(data.points);
+          return {
+            user_id: uid,
+            username: data.username,
+            points: data.points,
+            completed_challenges: data.completedChallenges,
+            level_badge: badgeInfo.badge,
+            cefr: badgeInfo.cefr,
+            accuracy: data.completedChallenges > 0 ? "95%" : "—",
+          };
+        });
+
+        await client.query(
+          `INSERT INTO user_english_leaderboard (
+             user_id, username, points, completed_challenges, level_badge, cefr, accuracy, updated_at
+           )
+           SELECT * FROM UNNEST(
+             $1::text[],
+             $2::varchar[],
+             $3::bigint[],
+             $4::integer[],
+             $5::varchar[],
+             $6::varchar[],
+             $7::varchar[]
+           ) AS r(user_id, username, points, completed_challenges, level_badge, cefr, accuracy)
+           ON CONFLICT (user_id) DO UPDATE SET
+             username = EXCLUDED.username,
+             points = EXCLUDED.points,
+             completed_challenges = EXCLUDED.completed_challenges,
+             level_badge = EXCLUDED.level_badge,
+             cefr = EXCLUDED.cefr,
+             accuracy = EXCLUDED.accuracy,
+             updated_at = CURRENT_TIMESTAMP`,
+          [
+            rowsToInsert.map((r) => r.user_id),
+            rowsToInsert.map((r) => r.username),
+            rowsToInsert.map((r) => r.points),
+            rowsToInsert.map((r) => r.completed_challenges),
+            rowsToInsert.map((r) => r.level_badge),
+            rowsToInsert.map((r) => r.cefr),
+            rowsToInsert.map((r) => r.accuracy),
+          ],
+        );
+      }
+
+      const leaderboardRes = await client.query(
+        `SELECT username, points, completed_challenges, level_badge, cefr, accuracy
+         FROM user_english_leaderboard
+         ORDER BY points DESC, completed_challenges DESC, username ASC`,
+      );
+
+      await client.query("COMMIT");
+
+      return leaderboardRes.rows.map((row) => ({
+        username: String(row.username),
+        levelBadge: String(row.level_badge),
+        cefr: String(row.cefr),
+        completedChallenges: Number(row.completed_challenges),
+        points: Number(row.points),
+        accuracy: String(row.accuracy),
+      }));
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+
+  // Fallback in-memory
+  const list = (global.__mockUsers || []).map((u) => {
+    const completions = (global.__mockEnglishChallengeCompletions || []).filter(
+      (c) => c.user_id === String(u.id) && c.status === "resuelto",
+    );
+    const pts = completions.reduce((sum, c) => sum + c.points_earned, 0);
+    const badgeInfo = computeEnglishBadge(pts);
+    return {
+      username: u.username,
+      levelBadge: badgeInfo.badge,
+      cefr: badgeInfo.cefr,
+      completedChallenges: completions.length,
+      points: pts,
+      accuracy: completions.length > 0 ? "95%" : "—",
+    };
+  });
+
+  return list.sort((a, b) => b.points - a.points || a.username.localeCompare(b.username));
+}
+
+export async function getEnglishUserProgress(userId: number | string): Promise<{
+  completedChallengeIds: string[];
+  totalPoints: number;
+}> {
+  const connectionString = getConnectionString();
+  if (connectionString) {
+    await initDatabase();
+    await ensureEnglishChallengeTables();
+    const res = await getPool().query(
+      `SELECT challenge_id, points_earned
+       FROM user_english_challenge_progress
+       WHERE user_id = $1 AND status = 'resuelto'`,
+      [String(userId)],
+    );
+    const completedChallengeIds = res.rows.map((r) => String(r.challenge_id));
+    const totalPoints = res.rows.reduce((sum, r) => sum + Number(r.points_earned || 0), 0);
+    return { completedChallengeIds, totalPoints };
+  }
+
+  const userComps = (global.__mockEnglishChallengeCompletions || []).filter(
+    (c) => c.user_id === String(userId) && c.status === "resuelto",
+  );
+  return {
+    completedChallengeIds: userComps.map((c) => c.challenge_id),
+    totalPoints: userComps.reduce((sum, c) => sum + c.points_earned, 0),
+  };
 }
 
 export async function completeUserCourseLesson(

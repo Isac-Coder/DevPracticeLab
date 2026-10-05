@@ -6,19 +6,36 @@ import {
   getChallengeBonusXp,
   getChallengeStatuses,
   setChallengeStatus,
+  saveEnglishChallengeCompletion,
+  getEnglishUserProgress,
   type ChallengeStatus,
 } from "@/lib/db";
 import { ALL_CHALLENGES, calculateSpeedBonusXp } from "@/lib/challengesData";
+import { ALL_ENGLISH_CHALLENGES } from "@/lib/englishChallengesData";
 
 const challengeIds = new Set(ALL_CHALLENGES.map((challenge) => challenge.id));
+const englishChallengeMap = new Map(ALL_ENGLISH_CHALLENGES.map((c) => [c.id, c]));
+
 const isChallengeStatus = (value: unknown): value is ChallengeStatus =>
   value === "resuelto" || value === "erroneo" || value === "faltante";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const session = await getSession();
     if (!session) {
       return NextResponse.json({ error: "Inicia sesión para cargar tus retos completados." }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const mode = searchParams.get("mode") || "dev";
+
+    if (mode === "english") {
+      const progress = await getEnglishUserProgress(session.userId);
+      return NextResponse.json({
+        mode: "english",
+        progress,
+        completed: progress.completedChallengeIds,
+      });
     }
 
     await ensureChallengeStatusRows(session.userId, ALL_CHALLENGES.map((challenge) => challenge.id));
@@ -27,6 +44,7 @@ export async function GET() {
       getChallengeBonusXp(session.userId),
     ]);
     return NextResponse.json({
+      mode: "dev",
       statuses,
       bonusXP,
       completed: Object.entries(statuses)
@@ -49,6 +67,26 @@ export async function POST(request: Request) {
     const body: unknown = await request.json();
     if (typeof body !== "object" || body === null) {
       return NextResponse.json({ error: "El reto indicado no es válido." }, { status: 400 });
+    }
+
+    // Check if mode is English
+    if ("mode" in body && body.mode === "english" && "challengeId" in body && typeof body.challengeId === "string") {
+      const challengeId = body.challengeId;
+      const challenge = englishChallengeMap.get(challengeId);
+      const isSuccess = "isSuccess" in body ? Boolean(body.isSuccess) : true;
+      const elapsedMs = "elapsedMs" in body && typeof body.elapsedMs === "number" ? body.elapsedMs : 0;
+      const basePoints = challenge?.xp || 50;
+
+      await saveEnglishChallengeCompletion(
+        session.userId,
+        challengeId,
+        isSuccess ? "resuelto" : "erroneo",
+        isSuccess ? basePoints : 0,
+        elapsedMs,
+      );
+
+      const progress = await getEnglishUserProgress(session.userId);
+      return NextResponse.json({ success: true, mode: "english", progress });
     }
 
     const challengeIdsToSave =

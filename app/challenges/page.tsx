@@ -30,6 +30,14 @@ import {
 } from "@/lib/challengesData";
 import { calculateAccountLevel } from "@/lib/accountLevel";
 import { useChallengeMode } from "@/lib/ChallengeModeContext";
+import { usePlatformMode } from "@/lib/PlatformModeContext";
+import {
+  TOP_NOTCH_CHALLENGES,
+  type EnglishChallenge,
+  type EnglishChallengeType,
+} from "@/lib/englishChallengesData";
+import { TOP_NOTCH_LEVELS } from "@/lib/topNotchData";
+import { BookOpen, Languages, Check, X, RotateCcw } from "lucide-react";
 
 interface ChallengeTimerRecord {
   elapsedMs: number;
@@ -46,6 +54,7 @@ const formatElapsedTime = (elapsedMs: number) => {
 
 export default function ChallengesPage() {
   const { user, loading: authLoading } = useAuth();
+  const { isEnglish } = usePlatformMode();
   const { setChallengeActive, setPracticeContext } = useChallengeMode();
   const [completedList, setCompletedList] = useState<string[]>([]);
   const [challengeStatuses, setChallengeStatuses] = useState<Record<string, ChallengeStatus>>({});
@@ -69,6 +78,87 @@ export default function ChallengesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedWeek, setSelectedWeek] = useState<number>(getCurrentCalendarWeek());
 
+  // English Mode Challenges State
+  const [selectedEnglishLevel, setSelectedEnglishLevel] = useState<string>("all");
+  const [selectedEnglishType, setSelectedEnglishType] = useState<string>("all");
+  const [selectedEnglishFilter, setSelectedEnglishFilter] = useState<"all" | "pending" | "completed">("all");
+  const [englishSearchQuery, setEnglishSearchQuery] = useState("");
+  const [selectedEnglishChallengeId, setSelectedEnglishChallengeId] = useState<string | null>(null);
+  const [completedEnglishChallenges, setCompletedEnglishChallenges] = useState<string[]>([]);
+  const [englishUserInputs, setEnglishUserInputs] = useState<Record<string, string>>({});
+  const [englishReorderWords, setEnglishReorderWords] = useState<Record<string, string[]>>({});
+  const [englishEvalResults, setEnglishEvalResults] = useState<Record<string, { ok: boolean; msg: string; explanation?: string } | null>>({});
+  const [englishActiveHints, setEnglishActiveHints] = useState<Record<string, boolean>>({});
+  const [currentEnglishPage, setCurrentEnglishPage] = useState(1);
+  const ENGLISH_PAGE_SIZE = 4;
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(`topnotch_challenges_completed_${user?.email ?? "guest"}`);
+      if (saved) {
+        setCompletedEnglishChallenges(JSON.parse(saved));
+      }
+    } catch {
+      // Ignore
+    }
+  }, [user?.email]);
+
+  const toggleCompleteEnglishChallenge = (chId: string, earnedXp: number) => {
+    let updated: string[];
+    if (completedEnglishChallenges.includes(chId)) {
+      updated = completedEnglishChallenges.filter((id) => id !== chId);
+    } else {
+      updated = [...completedEnglishChallenges, chId];
+      // Also update total English XP in localStorage
+      try {
+        const xpKey = `topnotch_user_xp_${user?.email ?? "guest"}`;
+        const currentXp = Number(localStorage.getItem(xpKey) || "0");
+        localStorage.setItem(xpKey, String(currentXp + earnedXp));
+      } catch {
+        // Ignore
+      }
+    }
+    setCompletedEnglishChallenges(updated);
+    try {
+      localStorage.setItem(`topnotch_challenges_completed_${user?.email ?? "guest"}`, JSON.stringify(updated));
+    } catch {
+      // Ignore
+    }
+  };
+
+  const handleEvaluateEnglishChallenge = (ch: EnglishChallenge) => {
+    let isCorrect = false;
+
+    if (ch.type === "sentence_reorder") {
+      const currentWords = englishReorderWords[ch.id] || [];
+      const userSentence = currentWords.join(" ").trim().toLowerCase();
+      const targetSentence = (ch.correctAnswer || "").trim().toLowerCase();
+      isCorrect = userSentence === targetSentence;
+    } else {
+      const rawInput = (englishUserInputs[ch.id] || "").trim().toLowerCase();
+      const primaryTarget = (ch.correctAnswer || "").trim().toLowerCase();
+      const acceptable = (ch.acceptableAnswers || ch.correctAnswers || []).map((a) => a.trim().toLowerCase());
+      isCorrect = rawInput === primaryTarget || acceptable.includes(rawInput);
+    }
+
+    const earnedXp = ch.xp ?? ch.points ?? 50;
+
+    setEnglishEvalResults((prev) => ({
+      ...prev,
+      [ch.id]: {
+        ok: isCorrect,
+        msg: isCorrect
+          ? `¡Excelente! Respuesta correcta (+${earnedXp} XP)`
+          : "Respuesta incorrecta. Revisa las reglas o la pista e inténtalo de nuevo.",
+        explanation: ch.explanation || ch.grammarExplanation,
+      },
+    }));
+
+    if (isCorrect && !completedEnglishChallenges.includes(ch.id)) {
+      toggleCompleteEnglishChallenge(ch.id, earnedXp);
+    }
+  };
+
   const currentCalendarWeek = useMemo(() => getCurrentCalendarWeek(), []);
   const userEmail = user?.email;
   const storageKey = userEmail ? `devpracticelab_challenges_${userEmail}` : "devpracticelab_challenges_guest";
@@ -76,7 +166,7 @@ export default function ChallengesPage() {
   const bonusXpStorageKey = `${storageKey}_bonus_xp`;
   const timerStorageKey = `${storageKey}_timers`;
   const lockedStorageKey = `${storageKey}_locked`;
-  const PAGE_SIZE = 6;
+  const PAGE_SIZE = 4;
 
   useEffect(() => {
     setChallengeActive(selectedChallengeId !== null);
@@ -656,6 +746,466 @@ export default function ChallengesPage() {
         return "bg-zinc-800 text-zinc-300";
     }
   };
+
+  const filteredEnglishChallenges = useMemo(() => {
+    return TOP_NOTCH_CHALLENGES.filter((ch) => {
+      if (selectedEnglishLevel !== "all" && ch.levelId !== selectedEnglishLevel) return false;
+      if (selectedEnglishType !== "all" && ch.type !== selectedEnglishType) return false;
+      if (selectedEnglishFilter === "pending" && completedEnglishChallenges.includes(ch.id)) return false;
+      if (selectedEnglishFilter === "completed" && !completedEnglishChallenges.includes(ch.id)) return false;
+
+      if (englishSearchQuery.trim()) {
+        const q = englishSearchQuery.toLowerCase();
+        const matchesTitle = ch.title.toLowerCase().includes(q);
+        const matchesPrompt = ch.prompt.toLowerCase().includes(q);
+        const matchesGrammar = (ch.grammarPoint || ch.category || "").toLowerCase().includes(q);
+        const matchesKeywords = (ch.keywords || []).some((k) => k.toLowerCase().includes(q));
+        if (!matchesTitle && !matchesPrompt && !matchesGrammar && !matchesKeywords) return false;
+      }
+      return true;
+    });
+  }, [selectedEnglishLevel, selectedEnglishType, selectedEnglishFilter, englishSearchQuery, completedEnglishChallenges]);
+
+  if (isEnglish) {
+    const totalEnglishXp = completedEnglishChallenges.reduce((sum, chId) => {
+      const ch = TOP_NOTCH_CHALLENGES.find((c) => c.id === chId);
+      return sum + (ch?.xp ?? 0);
+    }, 0);
+
+    const totalEnglishPages = Math.max(1, Math.ceil(filteredEnglishChallenges.length / ENGLISH_PAGE_SIZE));
+    const safeEnglishPage = Math.min(currentEnglishPage, totalEnglishPages);
+    const paginatedEnglishChallenges = filteredEnglishChallenges.slice(
+      (safeEnglishPage - 1) * ENGLISH_PAGE_SIZE,
+      safeEnglishPage * ENGLISH_PAGE_SIZE,
+    );
+
+    const visibleEnglishPageNumbers = Array.from({ length: totalEnglishPages }, (_, i) => i + 1).filter(
+      (page) => {
+        if (totalEnglishPages <= 7) return true;
+        const start = Math.max(1, Math.min(safeEnglishPage - 2, totalEnglishPages - 4));
+        const end = Math.min(totalEnglishPages, start + 4);
+        return page >= start && page <= end;
+      }
+    );
+
+    return (
+      <div className="flex min-h-screen flex-col bg-[#030814] text-slate-100 transition-colors duration-300">
+        <Navbar />
+
+        <main className="flex-1 pb-16">
+          {/* Hero Section */}
+          <section className="border-b border-blue-900/50 bg-gradient-to-b from-[#07152b] to-[#030814]">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 py-12">
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+                <div className="space-y-3 max-w-2xl">
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-sky-400">
+                    <Trophy className="h-4 w-4" />
+                    <span>Top Notch English Challenges (A1 — C1)</span>
+                  </div>
+                  <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white">
+                    Retos Dinámicos de Gramática y Comunicación
+                  </h1>
+                  <p className="text-sm leading-relaxed text-slate-300">
+                    Pon a prueba tu dominio de la gramática y el vocabulario según los libros de Top Notch & Summit. Completa ejercicios interactivos de orden de palabras, corrección de errores, transformación de tiempos y respuestas situacionales.
+                  </p>
+                </div>
+
+                {/* Progress / XP Stats Card */}
+                <div className="rounded-2xl border border-sky-400/30 bg-blue-950/60 p-6 shadow-xl shadow-sky-500/5 min-w-[280px]">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Tu Rendimiento en Inglés</p>
+                  <div className="mt-2 flex items-baseline gap-2">
+                    <span className="text-3xl font-black text-white">{totalEnglishXp}</span>
+                    <span className="text-xs font-bold text-sky-400">XP Acumulados</span>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between text-xs text-slate-300 pt-3 border-t border-blue-900/60">
+                    <span>Retos resueltos:</span>
+                    <span className="font-bold text-emerald-400">
+                      {completedEnglishChallenges.length} / {TOP_NOTCH_CHALLENGES.length}
+                    </span>
+                  </div>
+                  <div className="mt-4">
+                    <Link
+                      href="/ranking"
+                      className="block text-center rounded-xl bg-sky-400 hover:bg-sky-300 text-zinc-950 py-2 text-xs font-bold transition shadow"
+                    >
+                      Ver Ranking de Inglés
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* Filters Bar */}
+          <div className="border-b border-blue-900/40 bg-[#07152b]/60 sticky top-16 z-10 backdrop-blur-md">
+            <div className="mx-auto max-w-7xl px-4 sm:px-6 py-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                {/* Status Tabs */}
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setSelectedEnglishFilter("all")}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      selectedEnglishFilter === "all"
+                        ? "bg-sky-400 text-zinc-950 shadow-md"
+                        : "border border-blue-900/60 bg-blue-950/40 text-slate-300 hover:text-white"
+                    }`}
+                  >
+                    Todos ({TOP_NOTCH_CHALLENGES.length})
+                  </button>
+                  <button
+                    onClick={() => setSelectedEnglishFilter("pending")}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      selectedEnglishFilter === "pending"
+                        ? "bg-sky-400 text-zinc-950 shadow-md"
+                        : "border border-blue-900/60 bg-blue-950/40 text-slate-300 hover:text-white"
+                    }`}
+                  >
+                    Pendientes ({TOP_NOTCH_CHALLENGES.length - completedEnglishChallenges.length})
+                  </button>
+                  <button
+                    onClick={() => setSelectedEnglishFilter("completed")}
+                    className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer ${
+                      selectedEnglishFilter === "completed"
+                        ? "bg-emerald-500 text-zinc-950 shadow-md"
+                        : "border border-blue-900/60 bg-blue-950/40 text-slate-300 hover:text-white"
+                    }`}
+                  >
+                    Completados ({completedEnglishChallenges.length})
+                  </button>
+                </div>
+
+                {/* Dropdown Filters */}
+                <div className="flex flex-wrap items-center gap-3">
+                  <select
+                    value={selectedEnglishLevel}
+                    onChange={(e) => setSelectedEnglishLevel(e.target.value)}
+                    className="rounded-xl border border-blue-900 bg-[#07152b] px-3 py-1.5 text-xs font-bold text-white focus:border-sky-400 focus:outline-none"
+                  >
+                    <option value="all">Todos los Libros Top Notch</option>
+                    {TOP_NOTCH_LEVELS.map((lvl) => (
+                      <option key={lvl.id} value={lvl.id}>
+                        {lvl.bookTitle} ({lvl.cefrLevel})
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={selectedEnglishType}
+                    onChange={(e) => setSelectedEnglishType(e.target.value)}
+                    className="rounded-xl border border-blue-900 bg-[#07152b] px-3 py-1.5 text-xs font-bold text-white focus:border-sky-400 focus:outline-none"
+                  >
+                    <option value="all">Todas las Dinámicas</option>
+                    <option value="fill_in_the_blank">Completar Espacio</option>
+                    <option value="error_hunt">Caza de Errores</option>
+                    <option value="tense_transform">Transformación de Tiempo</option>
+                    <option value="sentence_reorder">Ordenar Oración</option>
+                    <option value="dialogue_completion">Diálogo Situacional</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative max-w-md">
+                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                  <Search className="h-4 w-4" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Buscar reto por regla, palabra clave o enunciado..."
+                  value={englishSearchQuery}
+                  onChange={(e) => setEnglishSearchQuery(e.target.value)}
+                  className="w-full rounded-xl border border-blue-900 bg-blue-950/50 py-2 pl-9 pr-4 text-xs text-white placeholder-slate-500 focus:border-sky-400 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Challenges Grid */}
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 py-8">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400">
+              <div>
+                Mostrando <strong className="text-white">{filteredEnglishChallenges.length}</strong> retos (Página {safeEnglishPage} de {totalEnglishPages})
+              </div>
+
+              {/* Top notch pagination header control */}
+              {totalEnglishPages > 1 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentEnglishPage((p) => Math.max(1, p - 1))}
+                    disabled={safeEnglishPage === 1}
+                    className="rounded-lg border border-blue-900 bg-blue-950/60 px-2.5 py-1 text-xs font-bold text-slate-300 disabled:opacity-40 hover:text-white"
+                  >
+                    ← Anterior
+                  </button>
+                  <span className="text-xs font-bold text-sky-400">
+                    {safeEnglishPage} / {totalEnglishPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentEnglishPage((p) => Math.min(totalEnglishPages, p + 1))}
+                    disabled={safeEnglishPage === totalEnglishPages}
+                    className="rounded-lg border border-blue-900 bg-blue-950/60 px-2.5 py-1 text-xs font-bold text-slate-300 disabled:opacity-40 hover:text-white"
+                  >
+                    Siguiente →
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-6 md:grid-cols-2">
+              {paginatedEnglishChallenges.map((ch) => {
+                const isDone = completedEnglishChallenges.includes(ch.id);
+                const evalRes = englishEvalResults[ch.id];
+                const showHint = englishActiveHints[ch.id];
+                const currentReorder = englishReorderWords[ch.id] || [];
+
+                return (
+                  <div
+                    key={ch.id}
+                    className={`rounded-2xl border p-6 space-y-4 transition shadow-lg ${
+                      isDone
+                        ? "border-emerald-500/40 bg-emerald-950/20"
+                        : "border-blue-900/60 bg-[#07152b] hover:border-blue-700"
+                    }`}
+                  >
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="rounded-md bg-sky-500/20 px-2 py-0.5 text-[10px] font-bold text-sky-300">
+                            {ch.levelName}
+                          </span>
+                          <span className="rounded-md bg-blue-900/50 px-2 py-0.5 text-[10px] font-medium text-slate-300">
+                            {ch.unit}
+                          </span>
+                        </div>
+                        <h3 className="text-base font-bold text-white">{ch.title}</h3>
+                        <p className="text-xs text-sky-400 font-medium mt-0.5">{ch.grammarPoint}</p>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1">
+                        <span className="rounded-full bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 text-xs font-bold text-amber-400">
+                          +{ch.xp} XP
+                        </span>
+                        {isDone && (
+                          <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-400">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Completado
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Prompt Box */}
+                    <div className="rounded-xl border border-blue-900/60 bg-blue-950/40 p-4 space-y-2">
+                      <p className="text-xs text-slate-400 font-medium">Instrucción:</p>
+                      <p className="text-sm font-semibold text-white leading-relaxed">{ch.prompt}</p>
+                    </div>
+
+                    {/* Dynamic Challenge Interaction according to type */}
+                    <div className="space-y-3">
+                      {/* TYPE 1: sentence_reorder */}
+                      {ch.type === "sentence_reorder" && ch.scrambledWords && (
+                        <div className="space-y-3">
+                          <div className="rounded-xl border border-blue-900/80 bg-blue-950/70 p-3 min-h-[44px] flex flex-wrap items-center gap-2">
+                            {currentReorder.length === 0 ? (
+                              <span className="text-xs text-slate-500 italic">
+                                Haz clic en las palabras de abajo para formar la oración...
+                              </span>
+                            ) : (
+                              currentReorder.map((word, wIdx) => (
+                                <button
+                                  key={wIdx}
+                                  onClick={() => {
+                                    const nextWords = currentReorder.filter((_, idx) => idx !== wIdx);
+                                    setEnglishReorderWords((prev) => ({ ...prev, [ch.id]: nextWords }));
+                                  }}
+                                  className="rounded-lg bg-sky-500/20 border border-sky-400/40 px-2.5 py-1 text-xs font-bold text-sky-200 hover:bg-red-950 hover:border-red-500 hover:text-red-200 transition"
+                                >
+                                  {word} ✕
+                                </button>
+                              ))
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {ch.scrambledWords.map((word, wIdx) => {
+                              const occurrencesInTarget = ch.scrambledWords!.filter((w) => w === word).length;
+                              const occurrencesInSelected = currentReorder.filter((w) => w === word).length;
+                              const isAllUsed = occurrencesInSelected >= occurrencesInTarget;
+
+                              return (
+                                <button
+                                  key={wIdx}
+                                  disabled={isAllUsed}
+                                  onClick={() => {
+                                    const nextWords = [...currentReorder, word];
+                                    setEnglishReorderWords((prev) => ({ ...prev, [ch.id]: nextWords }));
+                                  }}
+                                  className={`rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                                    isAllUsed
+                                      ? "opacity-30 border border-zinc-800 bg-zinc-900 text-zinc-600 cursor-not-allowed"
+                                      : "border border-blue-800 bg-blue-900/60 text-slate-200 hover:border-sky-400 hover:text-white"
+                                  }`}
+                                >
+                                  {word}
+                                </button>
+                              );
+                            })}
+
+                            {currentReorder.length > 0 && (
+                              <button
+                                onClick={() => setEnglishReorderWords((prev) => ({ ...prev, [ch.id]: [] }))}
+                                className="inline-flex items-center gap-1 rounded-lg border border-red-900/60 bg-red-950/40 px-2.5 py-1 text-xs text-red-300 hover:bg-red-900/60 transition"
+                              >
+                                <RotateCcw className="h-3 w-3" /> Reiniciar
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TYPE 2: multiple choice (options provided) */}
+                      {ch.options && ch.type !== "sentence_reorder" && (
+                        <div className="space-y-2">
+                          {ch.options.map((opt, oIdx) => {
+                            const isSelected = englishUserInputs[ch.id] === opt;
+                            return (
+                              <label
+                                key={oIdx}
+                                className={`flex items-center gap-3 rounded-xl p-3 text-xs cursor-pointer transition border ${
+                                  isSelected
+                                    ? "border-sky-400 bg-sky-500/20 text-white font-semibold"
+                                    : "border-blue-900/60 bg-blue-950/40 text-slate-300 hover:border-blue-700"
+                                }`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`opt-${ch.id}`}
+                                  value={opt}
+                                  checked={isSelected}
+                                  onChange={() => setEnglishUserInputs((prev) => ({ ...prev, [ch.id]: opt }))}
+                                  className="text-sky-500 focus:ring-sky-400"
+                                />
+                                <span>{opt}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* TYPE 3: text input (fill_in_the_blank or tense_transform without fixed options) */}
+                      {!ch.options && ch.type !== "sentence_reorder" && (
+                        <div>
+                          <input
+                            type="text"
+                            placeholder="Escribe tu respuesta aquí..."
+                            value={englishUserInputs[ch.id] || ""}
+                            onChange={(e) => setEnglishUserInputs((prev) => ({ ...prev, [ch.id]: e.target.value }))}
+                            className="w-full rounded-xl border border-blue-900 bg-blue-950/50 p-3 text-xs text-white placeholder-slate-500 focus:border-sky-400 focus:outline-none"
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Hint Section */}
+                    {showHint && (
+                      <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200 flex items-start gap-2">
+                        <HelpCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-400" />
+                        <div>
+                          <span className="font-bold">Pista:</span> {ch.hint}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Feedback result */}
+                    {evalRes && (
+                      <div
+                        className={`rounded-xl border p-3.5 text-xs ${
+                          evalRes.ok
+                            ? "border-emerald-500/40 bg-emerald-950/30 text-emerald-200"
+                            : "border-red-500/40 bg-red-950/30 text-red-200"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 font-bold">
+                          {evalRes.ok ? <Check className="h-4 w-4 text-emerald-400" /> : <X className="h-4 w-4 text-red-400" />}
+                          <span>{evalRes.msg}</span>
+                        </div>
+                        {evalRes.explanation && (
+                          <p className="mt-1.5 text-[11px] opacity-90 leading-relaxed">
+                            {evalRes.explanation}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Actions footer */}
+                    <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-blue-900/50">
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setEnglishActiveHints((prev) => ({ ...prev, [ch.id]: !prev[ch.id] }))}
+                          className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-amber-300 transition"
+                        >
+                          <HelpCircle className="h-3.5 w-3.5" />
+                          <span>{showHint ? "Ocultar pista" : "Ver pista"}</span>
+                        </button>
+                      </div>
+
+                      <button
+                        onClick={() => handleEvaluateEnglishChallenge(ch)}
+                        className="rounded-xl bg-sky-400 hover:bg-sky-300 text-zinc-950 font-bold text-xs px-5 py-2 transition shadow-md shadow-sky-500/10"
+                      >
+                        Validar Reto
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalEnglishPages > 1 && (
+              <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
+                <button
+                  type="button"
+                  onClick={() => setCurrentEnglishPage((prev) => Math.max(1, prev - 1))}
+                  disabled={safeEnglishPage === 1}
+                  className="rounded-xl border border-blue-900 bg-blue-950/70 px-4 py-2 text-xs font-bold text-slate-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Anterior
+                </button>
+
+                <div className="flex items-center gap-2 text-xs text-slate-400">
+                  {visibleEnglishPageNumbers.map((page) => (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setCurrentEnglishPage(page)}
+                      className={`h-8 w-8 rounded-lg border transition ${
+                        safeEnglishPage === page
+                          ? "border-sky-400 bg-sky-400 text-zinc-950 font-bold shadow-md shadow-sky-400/20"
+                          : "border-blue-900/80 bg-blue-950/60 text-slate-300 hover:border-sky-400/60 hover:text-white"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setCurrentEnglishPage((prev) => Math.min(totalEnglishPages, prev + 1))}
+                  disabled={safeEnglishPage === totalEnglishPages}
+                  className="rounded-xl border border-blue-900 bg-blue-950/70 px-4 py-2 text-xs font-bold text-slate-300 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Siguiente
+                </button>
+              </div>
+            )}
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-zinc-950">

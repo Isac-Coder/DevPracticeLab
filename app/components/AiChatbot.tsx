@@ -20,6 +20,7 @@ import {
 import Link from "next/link";
 import { useAuth } from "@/lib/AuthContext";
 import { useChallengeMode } from "@/lib/ChallengeModeContext";
+import { usePlatformMode } from "@/lib/PlatformModeContext";
 
 interface Message {
   id: string;
@@ -76,6 +77,7 @@ export default function AiChatbot() {
   const pathname = usePathname();
   const { user, loading: authLoading } = useAuth();
   const { challengeActive, practiceContext } = useChallengeMode();
+  const { isEnglish } = usePlatformMode();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
@@ -154,11 +156,20 @@ export default function AiChatbot() {
     }
   }, [isOpen]);
 
+  const ENGLISH_QUICK_PROMPTS = [
+    { label: "📖 Present Perfect vs Simple Past", text: "¿Cuál es la diferencia entre el Present Perfect y el Simple Past en Top Notch 2?" },
+    { label: "💬 Tag Questions", text: "¿Cómo se forman y cuándo se usan las Tag Questions en Top Notch 3?" },
+    { label: "🗣️ Modal Verbs", text: "¿Cómo usar modals for speculation (must, might, could) en Summit 1?" },
+    { label: "✍️ Passive Voice", text: "¿Cómo convertir una oración activa a pasiva en inglés formal?" },
+  ];
+
+  const activeQuickPrompts = isEnglish ? ENGLISH_QUICK_PROMPTS : QUICK_PROMPTS;
   const activePracticeContext = pathname.startsWith("/courses") && practiceContext?.type === "course"
     ? practiceContext
     : pathname.startsWith("/challenges") && challengeActive && practiceContext?.type === "challenge"
     ? practiceContext
     : null;
+
   const moduleNames: Record<string, string> = {
     ssh: "SSH",
     docker: "Docker",
@@ -449,23 +460,41 @@ export default function AiChatbot() {
       {/* Ventana del Chatbot */}
       {isOpen && (
         <div
-          className={`mb-3 w-[94vw] max-w-120 rounded-3xl border border-white/15 bg-[#091017]/95 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_rgba(16,185,129,0.12)] transition-all duration-200 flex flex-col overflow-hidden ${
-            isMinimized ? "h-14" : "h-160 max-h-[88vh]"
-          }`}
+          className={`mb-3 w-[94vw] max-w-120 rounded-3xl border transition-all duration-200 flex flex-col overflow-hidden ${
+            isEnglish
+              ? "border-sky-400/30 bg-[#07152b]/95 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_rgba(56,189,248,0.15)]"
+              : "border-white/15 bg-[#091017]/95 backdrop-blur-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_30px_rgba(16,185,129,0.12)]"
+          } ${isMinimized ? "h-14" : "h-160 max-h-[88vh]"}`}
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/10 bg-white/3 px-4 py-3 select-none">
             <div className="flex items-center gap-2.5">
-              <div className="relative flex h-8 w-8 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/15 text-emerald-300">
+              <div
+                className={`relative flex h-8 w-8 items-center justify-center rounded-xl border ${
+                  isEnglish
+                    ? "border-sky-400/40 bg-sky-500/20 text-sky-300"
+                    : "border-emerald-500/30 bg-emerald-500/15 text-emerald-300"
+                }`}
+              >
                 <Sparkles className="h-4 w-4" />
                 <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                  <span
+                    className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                      isEnglish ? "bg-sky-400" : "bg-emerald-400"
+                    }`}
+                  ></span>
+                  <span
+                    className={`relative inline-flex rounded-full h-2 w-2 ${
+                      isEnglish ? "bg-sky-400" : "bg-emerald-400"
+                    }`}
+                  ></span>
                 </span>
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
-                  <h3 className="text-xs font-bold text-white tracking-wide">DevPracticeBot</h3>
+                  <h3 className="text-xs font-bold text-white tracking-wide">
+                    {isEnglish ? "TopNotch AI Tutor" : "DevPracticeBot"}
+                  </h3>
                   <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.2 text-[9px] font-semibold transition cursor-pointer flex items-center gap-1 text-amber-300">
                     Gemini
                     <span className="text-[8px] opacity-70">✨</span>
@@ -479,7 +508,7 @@ export default function AiChatbot() {
                   )}
                   <span className="text-zinc-600">•</span>
                   <span className="flex items-center gap-1">
-                    <span className={`w-1.5 h-1.5 rounded-full bg-amber-400`}></span>
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                     <span className="font-mono text-[9px] text-zinc-400 truncate max-w-32">
                       Gemini: {currentModelName}
                     </span>
@@ -527,14 +556,22 @@ export default function AiChatbot() {
                       className={`flex gap-2.5 ${isUser ? "justify-end" : "justify-start"}`}
                     >
                       {!isUser && (
-                        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 mt-0.5">
+                        <div
+                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border mt-0.5 ${
+                            isEnglish
+                              ? "border-sky-400/40 bg-sky-500/20 text-sky-300"
+                              : "border-emerald-500/30 bg-emerald-500/10 text-emerald-300"
+                          }`}
+                        >
                           <Bot className="h-3.5 w-3.5" />
                         </div>
                       )}
                       <div
                         className={`max-w-[85%] rounded-2xl p-3.5 ${
                           isUser
-                            ? "border border-emerald-500/30 bg-emerald-500/15 text-white shadow-sm"
+                            ? isEnglish
+                              ? "border border-sky-400/40 bg-sky-500/20 text-white shadow-sm"
+                              : "border border-emerald-500/30 bg-emerald-500/15 text-white shadow-sm"
                             : "border border-white/10 bg-white/4 text-zinc-200"
                         }`}
                       >
@@ -583,9 +620,21 @@ export default function AiChatbot() {
                 {loading && (
                   <div className="flex items-center gap-2 text-zinc-400 text-xs pl-8">
                     <div className="flex gap-1">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce"></span>
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.2s]"></span>
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-bounce [animation-delay:0.4s]"></span>
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full animate-bounce ${
+                          isEnglish ? "bg-sky-400" : "bg-emerald-400"
+                        }`}
+                      ></span>
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full animate-bounce [animation-delay:0.2s] ${
+                          isEnglish ? "bg-sky-400" : "bg-emerald-400"
+                        }`}
+                      ></span>
+                      <span
+                        className={`h-1.5 w-1.5 rounded-full animate-bounce [animation-delay:0.4s] ${
+                          isEnglish ? "bg-sky-400" : "bg-emerald-400"
+                        }`}
+                      ></span>
                     </div>
                     <span className="text-[11px]">Consultando a Gemini...</span>
                   </div>
@@ -598,11 +647,15 @@ export default function AiChatbot() {
                 <div className="px-3 pb-2 border-t border-white/5 pt-2">
                   <p className="text-[10px] text-zinc-500 mb-1.5 px-1 font-medium">Preguntas frecuentes:</p>
                   <div className="flex flex-wrap gap-1.5">
-                    {QUICK_PROMPTS.slice(0, 3).map((prompt, idx) => (
+                    {activeQuickPrompts.slice(0, 3).map((prompt, idx) => (
                       <button
                         key={idx}
                         onClick={() => handleSendMessage(prompt.text)}
-                        className="rounded-full border border-white/10 bg-white/3 px-2.5 py-1 text-[10px] text-zinc-300 hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-200 transition cursor-pointer"
+                        className={`rounded-full border px-2.5 py-1 text-[10px] transition cursor-pointer ${
+                          isEnglish
+                            ? "border-sky-400/30 bg-sky-950/40 text-sky-200 hover:border-sky-400 hover:bg-sky-500/20 hover:text-white"
+                            : "border-white/10 bg-white/3 text-zinc-300 hover:border-emerald-500/30 hover:bg-emerald-500/10 hover:text-emerald-200"
+                        }`}
                       >
                         {prompt.label}
                       </button>
@@ -620,8 +673,16 @@ export default function AiChatbot() {
                     value={inputMessage}
                     onChange={(e) => setInputMessage(e.target.value)}
                     onKeyDown={handleKeyDown}
-                    placeholder={`Pregúntale al bot sobre ${currentModule || "programación"}...`}
-                    className="w-full resize-none rounded-2xl border border-white/10 bg-black/40 py-2.5 pl-3.5 pr-11 text-xs text-white placeholder-zinc-500 focus:border-emerald-400/50 focus:outline-none focus:ring-1 focus:ring-emerald-500/20 max-h-24"
+                    placeholder={
+                      isEnglish
+                        ? "Haz una pregunta sobre gramática o conversación en inglés..."
+                        : `Pregúntale al bot sobre ${currentModule || "programación"}...`
+                    }
+                    className={`w-full resize-none rounded-2xl border bg-black/40 py-2.5 pl-3.5 pr-11 text-xs text-white placeholder-zinc-500 focus:outline-none max-h-24 ${
+                      isEnglish
+                        ? "border-sky-400/30 focus:border-sky-400/70 focus:ring-1 focus:ring-sky-400/30"
+                        : "border-white/10 focus:border-emerald-400/50 focus:ring-1 focus:ring-emerald-500/20"
+                    }`}
                   />
                   {loading ? (
                     <button
@@ -637,7 +698,11 @@ export default function AiChatbot() {
                     <button
                       onClick={() => handleSendMessage()}
                       disabled={!inputMessage.trim()}
-                      className="absolute right-2 flex h-7 w-7 items-center justify-center rounded-xl bg-emerald-500 text-zinc-950 transition hover:bg-emerald-400 disabled:opacity-40 disabled:hover:bg-emerald-500 cursor-pointer shadow-md"
+                      className={`absolute right-2 flex h-7 w-7 items-center justify-center rounded-xl transition disabled:opacity-40 cursor-pointer shadow-md ${
+                        isEnglish
+                          ? "bg-sky-400 text-zinc-950 hover:bg-sky-300 disabled:hover:bg-sky-400"
+                          : "bg-emerald-500 text-zinc-950 hover:bg-emerald-400 disabled:hover:bg-emerald-500"
+                      }`}
                       title="Enviar mensaje"
                     >
                       <Send className="h-3.5 w-3.5" />
@@ -646,7 +711,12 @@ export default function AiChatbot() {
                 </div>
                 <div className="mt-2 flex items-center justify-between px-1 text-[10px] text-zinc-500">
                   <span>Enter para enviar</span>
-                  <Link href="/account" className="text-emerald-400/80 hover:text-emerald-300 hover:underline">
+                  <Link
+                    href="/account"
+                    className={`hover:underline ${
+                      isEnglish ? "text-sky-400/80 hover:text-sky-300" : "text-emerald-400/80 hover:text-emerald-300"
+                    }`}
+                  >
                     Configurar API Key
                   </Link>
                 </div>
@@ -663,18 +733,30 @@ export default function AiChatbot() {
             setIsOpen(true);
             setIsMinimized(false);
           }}
-          className="group relative flex cursor-pointer items-center gap-2.5 rounded-full border border-emerald-400/40 bg-linear-to-r from-emerald-500 to-teal-500 p-3 font-semibold text-zinc-950 shadow-[0_10px_30px_rgba(16,185,129,0.35)] transition-all hover:scale-105 hover:shadow-[0_15px_40px_rgba(16,185,129,0.5)] sm:px-4 sm:py-3"
-          title={activePracticeContext ? "Pedir una pista al tutor" : "Asistente de IA Gemini"}
+          className={`group relative flex cursor-pointer items-center gap-2.5 rounded-full p-3 font-semibold text-zinc-950 transition-all hover:scale-105 sm:px-4 sm:py-3 ${
+            isEnglish
+              ? "border border-sky-400/40 bg-linear-to-r from-sky-400 via-cyan-300 to-sky-400 shadow-[0_10px_30px_rgba(56,189,248,0.35)] hover:shadow-[0_15px_40px_rgba(56,189,248,0.5)]"
+              : "border border-emerald-400/40 bg-linear-to-r from-emerald-500 to-teal-500 shadow-[0_10px_30px_rgba(16,185,129,0.35)] hover:shadow-[0_15px_40px_rgba(16,185,129,0.5)]"
+          }`}
+          title={isEnglish ? "Tutor de Inglés Gemini" : activePracticeContext ? "Pedir una pista al tutor" : "Asistente de IA Gemini"}
         >
           <span className="relative flex h-5 w-5 items-center justify-center">
             <Sparkles className="h-5 w-5 animate-pulse text-zinc-950" />
           </span>
           <span className="hidden sm:inline-block text-xs font-bold tracking-tight">
-            {activePracticeContext ? "Tutor IA" : "Asistente IA"}
+            {isEnglish ? "TopNotch IA" : activePracticeContext ? "Tutor IA" : "Asistente IA"}
           </span>
           <span className="absolute -top-1 -right-1 flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-300 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-200"></span>
+            <span
+              className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                isEnglish ? "bg-sky-300" : "bg-emerald-300"
+              }`}
+            ></span>
+            <span
+              className={`relative inline-flex rounded-full h-3 w-3 ${
+                isEnglish ? "bg-sky-200" : "bg-emerald-200"
+              }`}
+            ></span>
           </span>
         </button>
       )}

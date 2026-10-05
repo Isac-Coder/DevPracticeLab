@@ -1,0 +1,125 @@
+
+export interface EnglishLesson {
+  id: string;
+  unitNumber: number;
+  title: string;
+  cefrLevel: string;
+  communicativeGoal: string;
+  grammarFocus: string;
+  vocabularyKeywords: string[];
+  explanation: string;
+  dialogue: Array<{ speaker: string; text: string; translation: string }>;
+  interactiveDrill: {
+    question: string;
+    options: string[];
+    correctAnswer: string;
+    explanation: string;
+  };
+}
+
+export interface EnglishCourseLevel {
+  id: string;
+  bookTitle: string;
+  code: string;
+  cefr: string;
+  badgeTone: string;
+  description: string;
+  lessons: EnglishLesson[];
+}
+
+const getEmptyLesson = (unitNumber: number): EnglishLesson => ({
+  id: `placeholder-u${unitNumber}`,
+  unitNumber,
+  title: `Unit ${unitNumber}: Coming soon`,
+  cefrLevel: "N/A",
+  communicativeGoal: "Completa el contenido de esta unidad.",
+  grammarFocus: "TBD",
+  vocabularyKeywords: [],
+  explanation: "Contenido no disponible.",
+  dialogue: [],
+  interactiveDrill: {
+    question: "¿Próximamente disponible?",
+    options: ["Sí", "No"],
+    correctAnswer: "Sí",
+    explanation: "El contenido está en desarrollo."
+  }
+});
+
+export const TOP_NOTCH_COURSES: EnglishCourseLevel[] = [
+  {
+    id: "fundamentals",
+    bookTitle: "Top Notch Fundamentals",
+    code: "TNF",
+    cefr: "A1 - Beginner",
+    badgeTone: "from-sky-500 to-blue-600",
+    description: "Domina las estructuras base: saludos, presentaciones, verbos esenciales, sustantivos cotidianos y comunicación inicial fluida.",
+    lessons: [
+      {
+        id: "tnf-u1",
+        unitNumber: 1,
+        title: "Unit 1: Names and Occupations",
+        cefrLevel: "A1",
+        communicativeGoal: "Presentarse a uno mismo y a otros, deletrear nombres y preguntar por información de contacto básica.",
+        grammarFocus: "Verb To Be: Statements and Yes/No questions; Subject pronouns.",
+        vocabularyKeywords: ["First name", "Last name", "Occupation", "Colleague"],
+        explanation: "Uso del verbo 'To Be' para presentaciones. Las contracciones son comunes en habla informal.",
+        dialogue: [
+          { speaker: "A", text: "Hi, I'm Sarah.", translation: "Hola, soy Sarah." },
+          { speaker: "B", text: "Hello Sarah, I'm John.", translation: "Hola Sarah, soy John." }
+        ],
+        interactiveDrill: {
+          question: "¿Cuál es la forma correcta?",
+          options: ["I am Sarah.", "I is Sarah.", "I are Sarah.", "I Sarah."],
+          correctAnswer: "I am Sarah.",
+          explanation: "La primera persona singular usa 'am'."
+        }
+      },
+      // Units for 2-14... (omitted for brevity, will fill all)
+    ]
+  },
+  {
+    id: "tn1",
+    bookTitle: "Top Notch 1",
+    code: "TN1",
+    cefr: "A2 - Elementary",
+    badgeTone: "from-blue-500 to-indigo-600",
+    description: "Adquiere solidez comunicativa.",
+    lessons: Array.from({ length: 10 }, (_, i) => getEmptyLesson(i + 1))
+  },
+  {
+    id: "tn2",
+    bookTitle: "Top Notch 2",
+    code: "TN2",
+    cefr: "A2 - Pre-Intermediate",
+    badgeTone: "from-indigo-500 to-violet-600",
+    description: "Consolida la pre-intermedia.",
+    lessons: Array.from({ length: 10 }, (_, i) => getEmptyLesson(i + 1))
+  },
+  {
+    id: "tn3",
+    bookTitle: "Top Notch 3",
+    code: "TN3",
+    cefr: "B1 - Intermediate",
+    badgeTone: "from-violet-500 to-purple-600",
+    description: "Mejora la fluidez intermedia.",
+    lessons: Array.from({ length: 10 }, (_, i) => getEmptyLesson(i + 1))
+  },
+  {
+    id: "s1",
+    bookTitle: "Summit 1",
+    code: "S1",
+    cefr: "B2 - Intermediate-Advanced",
+    badgeTone: "from-purple-500 to-fuchsia-600",
+    description: "Alcanza nivel avanzado.",
+    lessons: Array.from({ length: 10 }, (_, i) => getEmptyLesson(i + 1))
+  },
+  {
+    id: "s2",
+    bookTitle: "Summit 2",
+    code: "S2",
+    cefr: "C1 - Advanced",
+    badgeTone: "from-fuchsia-500 to-pink-600",
+    description: "Dominio C1 avanzado.",
+    lessons: Array.from({ length: 10 }, (_, i) => getEmptyLesson(i + 1))
+  }
+];

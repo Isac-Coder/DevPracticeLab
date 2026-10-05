@@ -5,6 +5,11 @@
   --foreground: #ededed;
 }
 
+.theme-english {
+  --background: #040914;
+  --foreground: #f0f6fc;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -16,9 +21,62 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Custom scrollbar for terminals */
+.theme-english .bg-zinc-950 {
+  background-color: #030814 !important;
+}
+
+.theme-english .bg-zinc-900 {
+  background-color: #07152b !important;
+}
+
+.theme-english .bg-zinc-900\/80 {
+  background-color: rgba(7, 21, 43, 0.85) !important;
+}
+
+.theme-english .bg-zinc-900\/60 {
+  background-color: rgba(7, 21, 43, 0.65) !important;
+}
+
+.theme-english .bg-zinc-900\/40 {
+  background-color: rgba(7, 21, 43, 0.45) !important;
+}
+
+.theme-english .bg-zinc-800 {
+  background-color: #0d2244 !important;
+}
+
+.theme-english .bg-zinc-800\/80 {
+  background-color: rgba(13, 34, 68, 0.85) !important;
+}
+
+.theme-english .border-zinc-800 {
+  border-color: #162f55 !important;
+}
+
+.theme-english .border-zinc-700 {
+  border-color: #1e4074 !important;
+}
+
+.theme-english .border-zinc-700\/50 {
+  border-color: rgba(30, 64, 116, 0.5) !important;
+}
+
+.theme-english .text-zinc-400 {
+  color: #94a3b8 !important;
+}
+
+.theme-english .text-zinc-300 {
+  color: #cbd5e1 !important;
+}
+
+.theme-english .text-zinc-200 {
+  color: #e2e8f0 !important;
+}
+
+/* Custom scrollbar for terminals and editors */
 ::-webkit-scrollbar {
   width: 8px;
 }

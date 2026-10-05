@@ -4,6 +4,7 @@ import "./globals.css";
 import { AuthProvider } from "@/lib/AuthContext";
 import { ProgressProvider } from "@/lib/ProgressContext";
 import { ChallengeModeProvider } from "@/lib/ChallengeModeContext";
+import { PlatformModeProvider } from "@/lib/PlatformModeContext";
 import AiChatbot from "@/app/components/AiChatbot";
 
 const geistSans = Geist({
@@ -36,8 +37,10 @@ export default function RootLayout({
         <AuthProvider>
           <ProgressProvider>
             <ChallengeModeProvider>
-              {children}
-              <AiChatbot />
+              <PlatformModeProvider>
+                {children}
+                <AiChatbot />
+              </PlatformModeProvider>
             </ChallengeModeProvider>
           </ProgressProvider>
         </AuthProvider>
