@@ -63,7 +63,7 @@ export const ALL_ENGLISH_CHALLENGES: EnglishChallenge[] = [
     correctAnswers: ["are", "'re", "are."],
     hint: "El pronombre 'they' es tercera persona plural, por lo que rige 'are'.",
     grammarExplanation: "Subject pronoun 'they' always takes 'are' in the present tense.",
-    topNotchUnit: "Top Notch Fundamentals — Unit 1: Getting Acquainted"
+    topNotchUnit: "Top Notch Fundamentals — Unit 1: Names and Occupations"
   },
   {
     id: "eng-fund-02",
@@ -81,7 +81,7 @@ export const ALL_ENGLISH_CHALLENGES: EnglishChallenge[] = [
     correctAnswers: ["her", "her."],
     hint: "El adjetivo posesivo para 'she' / Maria es 'her'.",
     grammarExplanation: "Use 'her' to refer to a possession belonging to a singular female subject.",
-    topNotchUnit: "Top Notch Fundamentals — Unit 2: People and Occupations"
+    topNotchUnit: "Top Notch Fundamentals — Unit 2: About People"
   },
   {
     id: "eng-fund-03",
