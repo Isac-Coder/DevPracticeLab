@@ -33,13 +33,6 @@ app/
 │   └── modules/
 ├── challenges/
 ├── components/
-│   ├── AiChatbot.tsx
-│   ├── CodePracticeEditor.tsx
-│   ├── Navbar.tsx
-│   ├── PracticeAuthGuard.tsx
-│   ├── PracticeCard.tsx
-│   ├── PracticeProgressBar.tsx
-│   └── SimulatedTerminal.tsx
 ├── docker/
 ├── docs/
 ├── login/
@@ -47,19 +40,16 @@ app/
 ├── register/
 ├── ssh/
 ├── typescript/
-├── globals.css
-├── layout.tsx
-├── page.tsx
+...
 lib/
 ├── accountLevel.ts
 ├── auth.ts
-├── AuthContext.tsx
 ├── challengesData.ts
 ├── db.ts
-├── ProgressContext.tsx
-public/
-scripts/
-└── daily-dont-stop.js
+├── englishDocsData.ts        # Datos de gramática Top Notch
+├── englishChallengesData.ts  # Retos de inglés
+├── englishCoursesData.ts     # Estructura cursos inglés
+└── ProgressContext.tsx
 ```
 
 ## Flujos clave

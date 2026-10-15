@@ -14,6 +14,7 @@ Plataforma educativa técnica para practicar **SSH**, **Docker**, **PostgreSQL**
 - **Base de datos:** PostgreSQL + Supabase
 - **Auth:** `bcryptjs`, `jose`, cookies JWT HTTP-only
 - **IA:** Gemini con fallback local y persistencia de chat
+- **Inglés técnico:** Módulos integrados con documentación de gramática (Top Notch) y retos específicos.
 - **Build:** Turbopack + Next.js
 
 ## Estado real del proyecto

@@ -49,6 +49,12 @@ En la ruta `/postgres` el usuario puede:
 ### 3) TypeScript real
 En `/typescript` el editor compila el código con `typescript.transpileModule` y muestra errores reales de compilación.
 
+### 4) Módulo de Inglés (Top Notch)
+Integración completa de metodología Top Notch:
+- **Documentación:** Gramática y teoría estructurada por niveles (Fundamentals, TN1-3, Summit).
+- **Retos:** Ejercicios interactivos semanales (fill-in-the-blank, error hunt, etc.).
+- **Progresión:** Sistema de seguimiento de lecciones.
+
 ### 4) Rutas de aprendizaje y progreso
 Se gestionan perfiles, avance, módulos activos y retos por semana con reglas de desbloqueo.
 

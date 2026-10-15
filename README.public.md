@@ -20,6 +20,7 @@ La experiencia combina retos, documentación oficial, editor de código y seguim
 - Docker
 - PostgreSQL
 - TypeScript
+- Inglés (Top Notch)
 
 ## Cómo funciona
 
